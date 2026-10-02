@@ -52,7 +52,7 @@
         android:theme="@style/Theme.OmiChat">
 
         <activity
-            android:name=".MainActivity"
+            android:name="app.octadevs.omichat.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|navigation|uiMode|density"

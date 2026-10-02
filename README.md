@@ -132,7 +132,7 @@ the generator in this repo's history rather than hand-editing five densities.
 ## Layout
 
 ```
-app/src/main/java/fun/octadevs/omichat/MainActivity.kt   all of the behaviour
+app/src/main/java/app/octadevs/omichat/MainActivity.kt   all of the behaviour
 app/src/main/res/mipmap-*/                                generated launcher icons
 app/src/main/res/values/themes.xml                        light-only, on purpose
 .github/workflows/release.yml                             CI, signing, release

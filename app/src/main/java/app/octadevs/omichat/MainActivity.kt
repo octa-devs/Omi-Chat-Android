@@ -1,4 +1,4 @@
-package fun.octadevs.omichat
+package app.octadevs.omichat
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -38,7 +38,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
-import fun.octadevs.omichat.databinding.ActivityMainBinding
+import app.octadevs.omichat.databinding.ActivityMainBinding
 
 /**
  * Single-Activity WebView host for the Omi Chat web app.

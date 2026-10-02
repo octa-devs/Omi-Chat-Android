@@ -27,7 +27,11 @@ val oauthHost =
     project.findProperty("omiOauthHost")?.toString() ?: "lfbrsfenvhgwzaawuasw.supabase.co"
 
 android {
-    namespace = "fun.octadevs.omichat"
+    // "fun" is a reserved Kotlin keyword, so it cannot appear in a package
+    // declaration and therefore not in the namespace either. applicationId
+    // below keeps the fun.octadevs identity, because that is the installed
+    // package name and changing it after release would ship a different app.
+    namespace = "app.octadevs.omichat"
     compileSdk = 35
 
     defaultConfig {
