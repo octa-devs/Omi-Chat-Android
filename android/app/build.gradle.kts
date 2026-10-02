@@ -30,7 +30,7 @@ val oauthHost =
 val supabaseUrl =
     project.findProperty("omiSupabaseUrl")?.toString() ?: "https://lfbrsfenvhgwzaawuasw.supabase.co"
 val supabaseAnonKey =
-    project.findProperty("omiSupabaseAnonKey")?.toString() ?: ""
+    project.findProperty("omiSupabaseAnonKey")?.toString() ?: "sb_publishable_DHk7cmplT0dZY3fsCW4OdQ_3CCWSV0n"
 
 android {
     namespace = "app.octadevs.omichat"

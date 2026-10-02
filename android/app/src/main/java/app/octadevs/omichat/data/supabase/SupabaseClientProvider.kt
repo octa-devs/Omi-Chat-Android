@@ -18,7 +18,7 @@ object SupabaseClientProvider {
 
     val client: SupabaseClient by lazy {
         val url = BuildConfig.SUPABASE_URL.ifEmpty { "https://lfbrsfenvhgwzaawuasw.supabase.co" }
-        val anonKey = BuildConfig.SUPABASE_ANON_KEY
+        val anonKey = BuildConfig.SUPABASE_ANON_KEY.ifEmpty { "sb_publishable_DHk7cmplT0dZY3fsCW4OdQ_3CCWSV0n" }
 
         createSupabaseClient(
             supabaseUrl = url,

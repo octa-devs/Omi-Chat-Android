@@ -116,6 +116,7 @@ jobs:
           ./gradlew :app:assembleRelease \
             -PomiVersionName="${{ steps.version.outputs.name }}" \
             -PomiVersionCode="${{ steps.version.outputs.code }}" \
+            -PomiSupabaseAnonKey="sb_publishable_DHk7cmplT0dZY3fsCW4OdQ_3CCWSV0n" \
             2>&1 | tee "$RUNNER_TEMP/gradle.log"
 
       # A red build is only useful if the reason outlives it. The raw task log is

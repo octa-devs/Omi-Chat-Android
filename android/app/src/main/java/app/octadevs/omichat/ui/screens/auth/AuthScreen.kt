@@ -1,8 +1,13 @@
 package app.octadevs.omichat.ui.screens.auth
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,13 +29,17 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -41,20 +50,29 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,6 +81,7 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.octadevs.omichat.BuildConfig
+import app.octadevs.omichat.R
 import app.octadevs.omichat.ui.components.GlassCard
 import app.octadevs.omichat.ui.theme.OmiBackground
 import app.octadevs.omichat.ui.theme.OmiBrand500
@@ -88,6 +107,7 @@ fun AuthScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val credentialManager = remember { CredentialManager.create(context) }
+    var isPasswordVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.isSuccess) {
         if (state.isSuccess) {
@@ -120,7 +140,7 @@ fun AuthScreen(
                     viewModel.signInWithGoogleIdToken(idToken)
                 }
             } catch (e: Exception) {
-                // User cancelled or error
+                // User cancelled or dismissed credential picker
             }
         }
     }
@@ -131,39 +151,82 @@ fun AuthScreen(
             .background(OmiBackground)
             .imePadding()
     ) {
+        // Aurora Glowing Ambient Background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(80.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(280.dp)
+                    .align(Alignment.TopStart)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(OmiBrand500.copy(alpha = 0.16f), Color.Transparent)
+                        ),
+                        shape = CircleShape
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .size(320.dp)
+                    .align(Alignment.BottomEnd)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(Color(0xFF6366F1).copy(alpha = 0.12f), Color.Transparent)
+                        ),
+                        shape = CircleShape
+                    )
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
+                .padding(horizontal = 24.dp, vertical = 36.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Brand Logo
+            // Official Omi Chat Brand Logo
             Box(
                 modifier = Modifier
-                    .size(68.dp)
-                    .clip(CircleShape)
-                    .background(OmiBrand500),
+                    .size(76.dp)
+                    .shadow(16.dp, RoundedCornerShape(22.dp), spotColor = OmiBrand500.copy(alpha = 0.35f))
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(Color.White)
+                    .padding(6.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "O",
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                Image(
+                    painter = painterResource(id = R.drawable.ic_brand_logo),
+                    contentDescription = "Omi Chat Logo",
+                    modifier = Modifier.fillMaxSize()
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            Text(
-                text = "Omi Chat",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = OmiTextPrimary
+            // App Title
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Omi",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        color = OmiTextPrimary,
+                        letterSpacing = (-0.5).sp
+                    )
                 )
-            )
+                Text(
+                    text = "Chat",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        color = OmiBrand500,
+                        letterSpacing = (-0.5).sp
+                    )
+                )
+            }
 
             Text(
                 text = if (state.isSignIn) "Welcome back! Sign in to continue." else "Create an account to start chatting.",
@@ -171,7 +234,7 @@ fun AuthScreen(
                     color = OmiTextSecondary,
                     textAlign = TextAlign.Center
                 ),
-                modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
+                modifier = Modifier.padding(top = 6.dp, bottom = 24.dp)
             )
 
             // Auth Card
@@ -182,7 +245,7 @@ fun AuthScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
+                        .padding(22.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Google Sign In Button
@@ -191,7 +254,7 @@ fun AuthScreen(
                         enabled = !state.isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
+                            .height(50.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = OmiSurface,
@@ -203,12 +266,13 @@ fun AuthScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            GoogleLogo(modifier = Modifier.size(18.dp))
+                            GoogleIconVector(modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Continue with Google",
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
+                                fontSize = 14.sp,
+                                color = OmiTextPrimary
                             )
                         }
                     }
@@ -217,13 +281,13 @@ fun AuthScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 14.dp),
+                            .padding(vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         HorizontalDivider(modifier = Modifier.weight(1f), color = OmiLine)
                         Text(
                             text = "or",
-                            modifier = Modifier.padding(horizontal = 10.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp),
                             style = MaterialTheme.typography.bodySmall.copy(color = OmiTextMuted)
                         )
                         HorizontalDivider(modifier = Modifier.weight(1f), color = OmiLine)
@@ -284,8 +348,17 @@ fun AuthScreen(
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = OmiTextMuted)
                         },
+                        trailingIcon = {
+                            IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
+                                Icon(
+                                    imageVector = if (isPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                    contentDescription = if (isPasswordVisible) "Hide password" else "Show password",
+                                    tint = OmiTextMuted
+                                )
+                            }
+                        },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
                             imeAction = ImeAction.Done
@@ -306,20 +379,42 @@ fun AuthScreen(
                         )
                     )
 
-                    // Error message
-                    if (state.error != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = state.error ?: "",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = OmiRust,
-                                textAlign = TextAlign.Center
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    // Formatted Clean Error Message
+                    AnimatedVisibility(
+                        visible = state.error != null,
+                        enter = fadeIn() + slideInVertically(),
+                        exit = fadeOut() + slideOutVertically()
+                    ) {
+                        state.error?.let { errText ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 14.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(OmiRust.copy(alpha = 0.08f))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ErrorOutline,
+                                    contentDescription = null,
+                                    tint = OmiRust,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = errText,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = OmiRust,
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
 
                     // Submit Button
                     Button(
@@ -330,7 +425,7 @@ fun AuthScreen(
                         enabled = !state.isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
+                            .height(50.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = OmiBrand500,
@@ -346,7 +441,7 @@ fun AuthScreen(
                         } else {
                             Text(
                                 text = if (state.isSignIn) "Sign In" else "Create Account",
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp
                             )
                         }
@@ -354,7 +449,7 @@ fun AuthScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Toggle Mode Button
             TextButton(
@@ -364,28 +459,82 @@ fun AuthScreen(
                 Text(
                     text = if (state.isSignIn) "Don't have an account? Sign Up" else "Already have an account? Sign In",
                     color = OmiBrand600,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp
                 )
             }
         }
     }
 }
 
+/**
+ * Authentic 4-Color Google Vector Icon
+ */
 @Composable
-fun GoogleLogo(modifier: Modifier = Modifier) {
+fun GoogleIconVector(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val cX = w / 2f
-        val cY = h / 2f
+        val width = size.width
+        val height = size.height
+        val strokeW = width * 0.2f
+        val radius = (width - strokeW) / 2f
+        val center = Offset(width / 2f, height / 2f)
 
-        // Google 'G' colors
-        drawCircle(color = Color(0xFF4285F4), radius = w * 0.45f, center = Offset(cX, cY))
-        drawCircle(color = Color.White, radius = w * 0.3f, center = Offset(cX, cY))
+        val red = Color(0xFFEA4335)
+        val yellow = Color(0xFFFBBC05)
+        val green = Color(0xFF34A853)
+        val blue = Color(0xFF4285F4)
+
+        val rect = Rect(
+            center.x - radius,
+            center.y - radius,
+            center.x + radius,
+            center.y + radius
+        )
+
+        // Draw 4 color arcs
+        drawArc(
+            color = red,
+            startAngle = 200f,
+            sweepAngle = 100f,
+            useCenter = false,
+            style = Stroke(width = strokeW),
+            topLeft = rect.topLeft,
+            size = rect.size
+        )
+        drawArc(
+            color = yellow,
+            startAngle = 120f,
+            sweepAngle = 80f,
+            useCenter = false,
+            style = Stroke(width = strokeW),
+            topLeft = rect.topLeft,
+            size = rect.size
+        )
+        drawArc(
+            color = green,
+            startAngle = 40f,
+            sweepAngle = 80f,
+            useCenter = false,
+            style = Stroke(width = strokeW),
+            topLeft = rect.topLeft,
+            size = rect.size
+        )
+        drawArc(
+            color = blue,
+            startAngle = 310f,
+            sweepAngle = 90f,
+            useCenter = false,
+            style = Stroke(width = strokeW),
+            topLeft = rect.topLeft,
+            size = rect.size
+        )
+
+        // Blue horizontal crossbar
+        val barHeight = strokeW * 0.95f
         drawRect(
-            color = Color(0xFF4285F4),
-            topLeft = Offset(cX, cY - h * 0.12f),
-            size = androidx.compose.ui.geometry.Size(w * 0.45f, h * 0.24f)
+            color = blue,
+            topLeft = Offset(center.x - strokeW * 0.1f, center.y - barHeight / 2f),
+            size = androidx.compose.ui.geometry.Size(radius + strokeW * 0.6f, barHeight)
         )
     }
 }

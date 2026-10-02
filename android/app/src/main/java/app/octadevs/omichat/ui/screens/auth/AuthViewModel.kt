@@ -57,7 +57,7 @@ class AuthViewModel(
             }.onFailure { e ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.localizedMessage ?: "Authentication failed"
+                    error = formatAuthError(e)
                 )
             }
         }
@@ -72,8 +72,30 @@ class AuthViewModel(
             }.onFailure { e ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.localizedMessage ?: "Google Sign-In failed"
+                    error = formatAuthError(e)
                 )
+            }
+        }
+    }
+
+    private fun formatAuthError(e: Throwable): String {
+        val msg = e.message ?: return "Authentication failed. Please try again."
+        return when {
+            msg.contains("invalid_credentials", ignoreCase = true) || msg.contains("Invalid login credentials", ignoreCase = true) ->
+                "Incorrect email or password. Please try again."
+            msg.contains("User already registered", ignoreCase = true) || msg.contains("user_already_exists", ignoreCase = true) ->
+                "An account with this email already exists."
+            msg.contains("Unsupported provider", ignoreCase = true) ->
+                "Google sign-in is not enabled in the Supabase dashboard."
+            msg.contains("No API key found", ignoreCase = true) ->
+                "Supabase API key is missing or invalid."
+            msg.contains("Password should be at least", ignoreCase = true) ->
+                "Password must be at least 6 characters."
+            msg.contains("Unable to resolve host", ignoreCase = true) || msg.contains("ConnectException", ignoreCase = true) ->
+                "No internet connection. Please check your network."
+            else -> {
+                val jsonMsgRegex = """"msg"\s*:\s*"([^"]+)"""".toRegex()
+                jsonMsgRegex.find(msg)?.groupValues?.get(1) ?: (e.localizedMessage ?: "Authentication failed")
             }
         }
     }
