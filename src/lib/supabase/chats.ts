@@ -330,6 +330,49 @@ export async function markMessageRead(chatId: string, _messageId: string, uid: s
 
 /* ── conversations ────────────────────────────────────────── */
 
+/**
+ * Add membership rows in the only order the RLS policy accepts.
+ *
+ * The "members self-join on create" policy admits a row when
+ *
+ *   user_id = auth.uid()  or  is_chat_member(chat_id)
+ *
+ * and is_chat_member() is an existence check against chat_members. Postgres
+ * evaluates WITH CHECK per row using the snapshot taken at the start of the
+ * statement, so a row inserted earlier in the *same* INSERT is not yet
+ * visible to it. Batching "me" and "the peer" into one statement therefore
+ * always fails on the peer row — my membership does not exist yet at the
+ * moment the peer's row is checked, and Postgres rejects the whole
+ * statement with a permission error.
+ *
+ * Committing my own row first, in its own statement, means the next
+ * statement's snapshot includes it. That is the flow the policy was written
+ * for; the batch insert just did not match it.
+ *
+ * 23505 means the row is already there, which is the desired end state, so it
+ * is swallowed rather than thrown.
+ */
+async function addMembers(
+  chatId: string,
+  meUid: string,
+  others: string[],
+  isAdmin: (index: number) => boolean,
+) {
+  const supabase = getSupabase();
+
+  const mine = await supabase
+    .from("chat_members")
+    .insert({ chat_id: chatId, user_id: meUid, is_admin: isAdmin(0) });
+  if (mine.error && mine.error.code !== "23505") throw mine.error;
+
+  if (others.length === 0) return;
+
+  const theirs = await supabase
+    .from("chat_members")
+    .insert(others.map((uid, i) => ({ chat_id: chatId, user_id: uid, is_admin: isAdmin(i + 1) })));
+  if (theirs.error && theirs.error.code !== "23505") throw theirs.error;
+}
+
 export async function getOrCreateDirectChat(
   me: { uid: string; displayName: string; avatarUrl: string | null },
   peer: { uid: string; displayName: string; username?: string; avatarUrl: string | null },
@@ -338,7 +381,11 @@ export async function getOrCreateDirectChat(
   if (await getChat(chatId)) return chatId;
 
   const supabase = getSupabase();
-  // 23505: another tab created it first. It exists, which is all we wanted.
+  // 23505 here means either another tab won the race, or a previous attempt
+  // created the chat and then failed before adding membership. Both are
+  // recoverable: addMembers below is idempotent, and it repairs the second
+  // case. Swallowing it is what stops that orphan from blocking this pair
+  // permanently.
   const { error } = await supabase.from("chats").insert({
     id: chatId,
     kind: "direct",
@@ -348,11 +395,7 @@ export async function getOrCreateDirectChat(
   });
   if (error && error.code !== "23505") throw error;
 
-  const { error: memberError } = await supabase.from("chat_members").insert([
-    { chat_id: chatId, user_id: me.uid },
-    { chat_id: chatId, user_id: peer.uid },
-  ]);
-  if (memberError && memberError.code !== "23505") throw memberError;
+  await addMembers(chatId, me.uid, [peer.uid], () => false);
 
   return chatId;
 }
@@ -365,8 +408,6 @@ export async function createGroupChat(input: {
 }): Promise<string> {
   const supabase = getSupabase();
   const chatId = `g_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
-  const all = [{ uid: input.me.uid }, ...input.members];
-
   const { error } = await supabase.from("chats").insert({
     id: chatId,
     kind: "group",
@@ -376,10 +417,14 @@ export async function createGroupChat(input: {
   });
   if (error) throw error;
 
-  const { error: memberError } = await supabase.from("chat_members").insert(
-    all.map((m, i) => ({ chat_id: chatId, user_id: m.uid, is_admin: i === 0 })),
+  // Same ordering constraint as a direct chat: my own membership has to be
+  // committed before the others can be authorised by is_chat_member().
+  await addMembers(
+    chatId,
+    input.me.uid,
+    input.members.map((m) => m.uid),
+    (i) => i === 0,
   );
-  if (memberError) throw memberError;
 
   return chatId;
 }
