@@ -339,7 +339,7 @@ function AppearanceSection({
                   "group flex items-center gap-3 rounded-2xl border px-3 py-2.5 transition-all duration-300",
                   active
                     ? "border-brand-300 bg-brand-50"
-                    : "border-fg/10 bg-white hover:border-brand-300",
+                    : "border-fg/10 bg-surface hover:border-brand-300",
                 )}
               >
                 <span

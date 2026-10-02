@@ -192,7 +192,7 @@ function ReactionPills({
             "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors",
             uids.includes(myUid)
               ? "border-brand-400/60 bg-brand-50 text-brand-700"
-              : "border-fg/10 bg-white/60 text-fg-2 hover:bg-fg/5",
+              : "border-fg/10 bg-surface/80 text-fg-2 hover:bg-fg/5",
           )}
           title={`${uids.length} ${uids.length === 1 ? "reaction" : "reactions"}`}
         >

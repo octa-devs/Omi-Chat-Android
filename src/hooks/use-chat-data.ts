@@ -56,13 +56,13 @@ export function useChat(chatId: string | null) {
   return { chat, loading };
 }
 
-/* ── messages ─────────────────────────────────────────────── */
-
 export function useMessages(chatId: string | null, limit = 250) {
   const [messages, setMessages] = useState<OmiMessage[]>([]);
+  const [optimistic, setOptimistic] = useState<OmiMessage[]>([]);
   const [loading, setLoading] = useState(Boolean(chatId));
 
   useEffect(() => {
+    setOptimistic([]);
     if (!chatId) {
       setMessages([]);
       setLoading(false);
@@ -72,11 +72,61 @@ export function useMessages(chatId: string | null, limit = 250) {
     const unwatch = watchMessages(chatId, limit, (next) => {
       setMessages(next);
       setLoading(false);
+      // Reconcile and remove optimistic messages that have appeared in the server response
+      setOptimistic((prev) =>
+        prev.filter(
+          (opt) =>
+            !next.some(
+              (m) =>
+                m.id === opt.id ||
+                (m.senderId === opt.senderId &&
+                  m.text === opt.text &&
+                  m.kind === opt.kind &&
+                  Math.abs(m.createdAt - opt.createdAt) < 20000),
+            ),
+        ),
+      );
     });
     return unwatch;
   }, [chatId, limit]);
 
-  return { messages, loading };
+  const addOptimistic = (msg: OmiMessage) => {
+    setOptimistic((prev) => [...prev, msg]);
+  };
+
+  const updateOptimistic = (tempId: string, patch: Partial<OmiMessage>) => {
+    setOptimistic((prev) =>
+      prev.map((m) => (m.id === tempId ? { ...m, ...patch } : m)),
+    );
+  };
+
+  const removeOptimistic = (tempId: string) => {
+    setOptimistic((prev) => prev.filter((m) => m.id !== tempId));
+  };
+
+  // Merge server messages with active optimistic messages
+  const mergedMessages = [
+    ...messages,
+    ...optimistic.filter(
+      (opt) =>
+        !messages.some(
+          (m) =>
+            m.id === opt.id ||
+            (m.senderId === opt.senderId &&
+              m.text === opt.text &&
+              m.kind === opt.kind &&
+              Math.abs(m.createdAt - opt.createdAt) < 20000),
+        ),
+    ),
+  ];
+
+  return {
+    messages: mergedMessages,
+    loading,
+    addOptimistic,
+    updateOptimistic,
+    removeOptimistic,
+  };
 }
 
 /* ── typing ───────────────────────────────────────────────── */

@@ -154,27 +154,21 @@ export function Composer({
     }, 2000);
   };
 
-  const send = async () => {
+  const send = () => {
     const value = text.trim();
-    if (!value || sending || disabled) return;
-    setSending(true);
+    if (!value || disabled) return;
     setText("");
-    if (chatId) saveDraft(chatId, ""); // clear draft on send
+    if (chatId) saveDraft(chatId, ""); // clear draft immediately
     if (typingRef.current) clearTimeout(typingRef.current);
     if (isTypingRef.current) {
       isTypingRef.current = false;
       onTyping(false);
     }
-    try {
-      await onSend(value);
-      onCancelReply();
-      taRef.current?.focus();
-    } catch (e) {
-      setText(value); // give the message back so nothing is lost
-      toast.error(errorMessage(e));
-    } finally {
-      setSending(false);
-    }
+    onCancelReply();
+    taRef.current?.focus();
+    void onSend(value).catch((e) => {
+      toast.error(errorMessage(e) || "Failed to send message.");
+    });
   };
 
   const attach = async (file: File | undefined) => {
@@ -463,8 +457,8 @@ export function Composer({
         {text.trim() ? (
           <motion.button
             type="button"
-            onClick={() => void send()}
-            disabled={!text.trim() || sending || disabled || text.length > MAX_MSG_LENGTH}
+            onClick={() => send()}
+            disabled={!text.trim() || disabled || text.length > MAX_MSG_LENGTH}
             whileTap={{ scale: 0.9 }}
             whileHover={{ scale: 1.06 }}
             aria-label="Send message"
@@ -475,11 +469,7 @@ export function Composer({
                 : "bg-ink-800 text-fg-3",
             )}
           >
-            {sending ? (
-              <Loader2 className="size-4.5 animate-spin" />
-            ) : (
-              <ArrowUp className="size-4.5" />
-            )}
+            <ArrowUp className="size-4.5" />
           </motion.button>
         ) : onVoice ? (
           <motion.button

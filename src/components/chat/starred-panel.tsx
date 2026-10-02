@@ -82,7 +82,7 @@ export function StarredPanel({
                 <ul className="space-y-2">
                   {entries.map((entry) => (
                     <li key={entry.messageId}>
-                      <div className="rounded-2xl border border-fg/8 bg-white/60 px-4 py-3 transition-colors hover:bg-white/80">
+                      <div className="rounded-2xl border border-line bg-surface/75 px-4 py-3 transition-colors hover:bg-surface">
                         {/* chat title */}
                         <div className="mb-1.5 flex items-center justify-between gap-2">
                           <span className="flex items-center gap-1.5 text-[0.65rem] font-semibold text-fg-3 uppercase tracking-wide">

@@ -180,7 +180,7 @@ export function NewChatDialog({
             {tab === t.key && (
               <motion.span
                 layoutId="new-chat-tab"
-                className="absolute inset-0 -z-10 rounded-xl bg-white shadow-[0_1px_3px_rgba(19,23,37,0.1)] ring-1 ring-fg/8"
+                className="absolute inset-0 -z-10 rounded-xl bg-surface shadow-[0_1px_3px_rgba(0,0,0,0.15)] ring-1 ring-fg/8"
                 transition={{ type: "spring", stiffness: 480, damping: 38 }}
               />
             )}

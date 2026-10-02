@@ -93,7 +93,7 @@ export function FieldMessage({
 /* ── input ────────────────────────────────────────────────── */
 
 const inputBase =
-  "peer w-full rounded-2xl border border-fg/12 bg-white px-4 text-[0.95rem] text-fg shadow-[0_1px_2px_rgba(19,23,37,0.04)] outline-none transition-all duration-300 placeholder:text-fg-3 hover:border-fg/20 focus:border-brand-500 focus:bg-white focus:shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-brand-500)_14%,transparent),0_1px_2px_rgba(19,23,37,0.04)] disabled:opacity-50";
+  "peer w-full rounded-2xl border border-line bg-surface px-4 text-[0.95rem] text-fg shadow-[0_1px_2px_rgba(0,0,0,0.04)] outline-none transition-all duration-300 placeholder:text-fg-3 hover:border-fg/20 focus:border-brand-500 focus:bg-surface focus:shadow-[0_0_0_4px_color-mix(in_oklab,var(--color-brand-500)_14%,transparent),0_1px_2px_rgba(0,0,0,0.04)] disabled:opacity-50";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   icon?: ReactNode;
@@ -285,7 +285,7 @@ export function Segmented<T extends string>({
               <motion.span
                 layoutId={`seg-${groupId}`}
                 transition={{ type: "spring", stiffness: 480, damping: 38 }}
-                className="absolute inset-0 -z-10 rounded-xl bg-white shadow-[0_1px_3px_rgba(19,23,37,0.1)] ring-1 ring-fg/10"
+                className="absolute inset-0 -z-10 rounded-xl bg-surface shadow-[0_1px_3px_rgba(0,0,0,0.15)] ring-1 ring-fg/10"
               />
             )}
             {o.label}
@@ -308,7 +308,7 @@ export const Select = forwardRef<
         ref={ref}
         className={cn(
           inputBase,
-          "h-12 cursor-pointer appearance-none pr-10 [&>option]:bg-white [&>option]:text-fg",
+          "h-12 cursor-pointer appearance-none pr-10 [&>option]:bg-surface [&>option]:text-fg",
           className,
         )}
         {...props}

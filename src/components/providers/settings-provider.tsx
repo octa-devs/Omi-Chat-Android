@@ -101,6 +101,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset.theme = settings.theme;
     document.documentElement.dataset.compact = String(settings.compactMode);
     document.documentElement.dataset.themeBg = BACKDROPS[settings.theme];
+    if (settings.theme === "dark" || settings.theme === "noir") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
     try {
       localStorage.setItem("omi.settings", JSON.stringify(settings));
     } catch {

@@ -20,7 +20,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
             toastOptions={{
               classNames: {
                 toast:
-                  "!rounded-2xl !border !border-fg/10 !bg-white !backdrop-blur-2xl !text-fg !shadow-[0_18px_46px_-20px_rgba(19,23,37,0.3)]",
+                  "!rounded-2xl !border !border-line !bg-surface !backdrop-blur-2xl !text-fg !shadow-[0_18px_46px_-20px_rgba(0,0,0,0.4)]",
                 title: "!text-fg !font-medium",
                 description: "!text-fg-2",
                 success: "!border-mint-200",

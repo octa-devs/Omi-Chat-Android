@@ -76,7 +76,12 @@ export function Conversation({
   const isMobile = useIsMobile();
 
   const { chat, loading: chatLoading } = useChat(chatId);
-  const { messages, loading: messagesLoading } = useMessages(chatId);
+  const {
+    messages,
+    loading: messagesLoading,
+    addOptimistic,
+    updateOptimistic,
+  } = useMessages(chatId);
   const typingNames = useTyping(chatId);
 
   const [peer, setPeer] = useState<OmiUser | null>(null);
@@ -182,11 +187,19 @@ export function Conversation({
   const handleSend = useCallback(
     async (text: string) => {
       if (!chat || !uid || !profile) return;
-      await sendMessage({
-        chat,
+      const cleanText = text.trim();
+      if (!cleanText) return;
+
+      const tempId = `opt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const optimisticMsg: OmiMessage = {
+        id: tempId,
+        chatId: chat.id,
         senderId: uid,
-        senderName: profile.displayName,
-        text,
+        senderName: profile.displayName || "You",
+        text: cleanText,
+        kind: "text",
+        createdAt: Date.now(),
+        status: "sending",
         replyTo: replyTo
           ? {
               id: replyTo.id,
@@ -194,45 +207,116 @@ export function Conversation({
               senderName: replyTo.senderName,
             }
           : null,
-      });
+      };
+
+      // Instantly render in UI
+      addOptimistic(optimisticMsg);
       setAtBottom(true);
+
+      try {
+        await sendMessage({
+          chat,
+          senderId: uid,
+          senderName: profile.displayName,
+          text: cleanText,
+          replyTo: replyTo
+            ? {
+                id: replyTo.id,
+                text: replyTo.text || "Attachment",
+                senderName: replyTo.senderName,
+              }
+            : null,
+        });
+        updateOptimistic(tempId, { status: "sent" });
+      } catch (e) {
+        updateOptimistic(tempId, { status: "failed" });
+        toast.error(errorMessage(e) || "Failed to send message.");
+      }
     },
-    [chat, uid, profile, replyTo],
+    [chat, uid, profile, replyTo, addOptimistic, updateOptimistic],
   );
 
   const handleAttach = useCallback(
     async (file: File, onProgress: (p: number) => void) => {
       if (!chat || !uid || !profile) return;
-      const res = await uploadAttachment(uid, chat.id, file, onProgress);
-      await sendMessage({
-        chat,
+      const isImg = file.type.startsWith("image/");
+      const localPreviewUrl = isImg ? URL.createObjectURL(file) : null;
+      const tempId = `opt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+      addOptimistic({
+        id: tempId,
+        chatId: chat.id,
         senderId: uid,
         senderName: profile.displayName,
         text: "",
-        kind: file.type.startsWith("image/") ? "image" : "file",
-        attachmentUrl: res.url,
-        attachmentName: res.name,
-        attachmentSize: res.size,
+        kind: isImg ? "image" : "file",
+        attachmentUrl: localPreviewUrl,
+        attachmentName: file.name,
+        attachmentSize: file.size,
+        createdAt: Date.now(),
+        status: "sending",
       });
       setAtBottom(true);
+
+      try {
+        const res = await uploadAttachment(uid, chat.id, file, onProgress);
+        await sendMessage({
+          chat,
+          senderId: uid,
+          senderName: profile.displayName,
+          text: "",
+          kind: isImg ? "image" : "file",
+          attachmentUrl: res.url,
+          attachmentName: res.name,
+          attachmentSize: res.size,
+        });
+        updateOptimistic(tempId, { status: "sent" });
+      } catch (e) {
+        updateOptimistic(tempId, { status: "failed" });
+        throw e;
+      }
     },
-    [chat, uid, profile],
+    [chat, uid, profile, addOptimistic, updateOptimistic],
   );
 
   // Feature: Voice message handler
   const handleVoice = useCallback(
     async (blob: Blob, durationSec: number) => {
       if (!chat || !uid || !profile) return;
-      await sendAudioMessage({
-        chat,
+      const localAudioUrl = URL.createObjectURL(blob);
+      const tempId = `opt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+      addOptimistic({
+        id: tempId,
+        chatId: chat.id,
         senderId: uid,
         senderName: profile.displayName,
-        audioBlob: blob,
-        durationSec,
+        text: `Voice message (${Math.ceil(durationSec)}s)`,
+        kind: "audio",
+        attachmentUrl: localAudioUrl,
+        audioDuration: durationSec,
+        attachmentName: "voice_message.webm",
+        attachmentSize: blob.size,
+        createdAt: Date.now(),
+        status: "sending",
       });
       setAtBottom(true);
+
+      try {
+        await sendAudioMessage({
+          chat,
+          senderId: uid,
+          senderName: profile.displayName,
+          audioBlob: blob,
+          durationSec,
+        });
+        updateOptimistic(tempId, { status: "sent" });
+      } catch (e) {
+        updateOptimistic(tempId, { status: "failed" });
+        throw e;
+      }
     },
-    [chat, uid, profile],
+    [chat, uid, profile, addOptimistic, updateOptimistic],
   );
 
   const handleTyping = useCallback(
