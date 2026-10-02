@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Omi Chat</string>
+
+    <!--
+        Google refuses to run OAuth inside an embedded WebView and answers with
+        403 disallowed_useragent. Rather than let people tap "Continue with
+        Google" and land on an opaque Google error page, the flow is intercepted
+        and replaced with this explanation.
+    -->
+    <string name="google_blocked_title">Google sign-in is not available in the app</string>
+    <string name="google_blocked_body">Google does not allow sign-in to run inside an app\'s built-in browser, for security reasons. Use your email address instead — you will get a one-time code, and it takes about ten seconds.</string>
+    <string name="google_blocked_ok">Use email instead</string>
+
+    <string name="load_error_title">Could not reach Omi Chat</string>
+    <string name="load_error_body">Check your connection and try again.</string>
+    <string name="load_error_retry">Try again</string>
+
+    <string name="download_failed">That file could not be downloaded.</string>
+    <string name="no_app_for_link">No app on this device can open that link.</string>
+</resources>

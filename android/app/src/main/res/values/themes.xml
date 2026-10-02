@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        No values-night variant on purpose. The site is light-only, so honouring
+        the system dark theme would give a dark window behind a light page and
+        a white flash on every cold start. Staying light unconditionally is what
+        the design actually calls for.
+    -->
+    <style name="Theme.OmiChat" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/omi_surface</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!--
+        Holds the launcher window on the brand colour until the WebView has real
+        content, so there is no white gap between the tap and the first paint.
+    -->
+    <style name="Theme.OmiChat.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/omi_surface</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/omi_brand_400</item>
+        <item name="postSplashScreenTheme">@style/Theme.OmiChat</item>
+    </style>
+
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors the site's light palette so the launcher window, the splash and
+         the first painted frame are the same colour the page is about to paint.
+         A mismatch here is exactly what reads as a janky cold start. -->
+    <color name="omi_surface">#FFFFFFFF</color>
+    <color name="omi_ink">#FF131725</color>
+
+    <!-- Taken from the site's globals.css: the brand-400 and brand-800
+         variables, the two ends of the gradient used to draw the launcher
+         icon. Written without the leading dashes because a literal double
+         hyphen is not permitted inside an XML comment. -->
+    <color name="omi_brand_400">#FF5A8CEB</color>
+    <color name="omi_brand_800">#FF174492</color>
+</resources>

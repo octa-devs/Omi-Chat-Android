@@ -1,0 +1,23 @@
+*.iml
+.gradle/
+build/
+local.properties
+.idea/
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+
+# Signing material must never be committed.
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.b64
+
+# Signed APKs are build output; the workflow publishes them as release assets.
+/app/build/outputs/
+*.apk
+*.aab
+*.idsig
