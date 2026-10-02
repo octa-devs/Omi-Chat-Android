@@ -43,7 +43,7 @@
             android:text="@string/load_error_body"
             android:textColor="@color/omi_ink"
             android:textSize="14sp"
-            android:textAlpha="0.6"
+            android:alpha="0.6"
             android:gravity="center" />
 
         <Button
