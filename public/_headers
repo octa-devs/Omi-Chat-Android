@@ -1,7 +1,5 @@
 # Hashed build output is immutable by construction: the filename changes when
 # the content does. A long max-age stops the WebView re-downloading the whole
 # app bundle on every launch.
-```
 /_next/static/*
   Cache-Control: public,max-age=31536000,immutable
-```

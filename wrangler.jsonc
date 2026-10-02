@@ -1,7 +1,9 @@
 {
     "$schema": "node_modules/wrangler/config-schema.json",
     "main": ".open-next/worker.js",
-    "name": "omi-chat",
+    // Must match the Worker name in the Cloudflare dashboard. Workers Builds
+    // fails the deploy outright when these disagree, so keep them in step.
+    "name": "omichatapp",
     // 2024-09-23 is the earliest date @opennextjs/cloudflare supports. Older
     // dates lack the Node.js APIs the adapter relies on at runtime.
     "compatibility_date": "2024-12-30",
@@ -19,9 +21,10 @@
     },
     "services": [
         {
-            // Lets the Worker call itself for ISR revalidation.
+            // Lets the Worker call itself for ISR revalidation. The service
+            // must match the "name" above.
             "binding": "WORKER_SELF_REFERENCE",
-            "service": "omi-chat",
+            "service": "omichatapp",
         },
     ],
     "images": {
