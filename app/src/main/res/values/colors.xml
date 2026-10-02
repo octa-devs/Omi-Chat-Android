@@ -6,8 +6,10 @@
     <color name="omi_surface">#FFFFFFFF</color>
     <color name="omi_ink">#FF131725</color>
 
-    <!-- src/app/globals.css --color-brand-400 / --color-brand-800, the two ends
-         of the gradient used to draw the launcher icon. -->
+    <!-- Taken from the site's globals.css: the brand-400 and brand-800
+         variables, the two ends of the gradient used to draw the launcher
+         icon. Written without the leading dashes because a literal double
+         hyphen is not permitted inside an XML comment. -->
     <color name="omi_brand_400">#FF5A8CEB</color>
     <color name="omi_brand_800">#FF174492</color>
 </resources>
