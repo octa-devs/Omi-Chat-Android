@@ -169,7 +169,7 @@ export function watchCallRing(
       const data = payload?.payload as
         | { callId?: string; callerId?: string; callerName?: string; kind?: "audio" | "video" }
         | undefined;
-      if (data?.callId && data?.callerId) {
+      if (data?.callId && data?.callerId && data.callerId !== uid) {
         try {
           await getSupabase().from("call_members").upsert({
             call_id: data.callId,
@@ -297,6 +297,9 @@ export async function placeCall(input: {
   chatId: string | null;
   callId?: string;
 }): Promise<string> {
+  if (input.peerId === input.callerId) {
+    throw new Error("You cannot start a call with yourself.");
+  }
   const supabase = getSupabase();
   const callId = input.callId ?? makeCallId();
 

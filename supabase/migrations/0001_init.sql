@@ -137,12 +137,13 @@ create table if not exists public.messages (
   sender_id       uuid        not null references public.profiles (id) on delete cascade,
   text            text        not null default '',
   kind            text        not null default 'text'
-                    check (kind in ('text', 'image', 'file', 'system', 'call')),
+                    check (kind in ('text', 'image', 'file', 'system', 'call', 'audio')),
   attachment_url  text,
   attachment_name text,
   attachment_size bigint,
   -- Snapshot of the replied-to message, so the preview survives deletion.
   reply_to        jsonb,
+  reactions       jsonb       default '{}'::jsonb,
   edited_at       timestamptz,
   deleted         boolean     not null default false,
   created_at      timestamptz not null default now()
@@ -437,6 +438,74 @@ drop policy if exists "author edits or deletes own message" on public.messages;
 create policy "author edits or deletes own message"
   on public.messages for update to authenticated
   using (sender_id = auth.uid()) with check (sender_id = auth.uid());
+
+drop policy if exists "members update message reactions" on public.messages;
+create policy "members update message reactions"
+  on public.messages for update to authenticated
+  using (public.is_chat_member(chat_id))
+  with check (public.is_chat_member(chat_id));
+
+create or replace function public.toggle_message_reaction(
+  p_message_id uuid,
+  p_emoji text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_chat_id text;
+  v_reactions jsonb;
+  v_current_arr jsonb;
+  v_new_arr jsonb;
+  v_updated_reactions jsonb;
+begin
+  if v_user_id is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select chat_id, coalesce(reactions, '{}'::jsonb)
+    into v_chat_id, v_reactions
+    from public.messages
+    where id = p_message_id;
+
+  if v_chat_id is null then
+    raise exception 'Message not found';
+  end if;
+
+  if not public.is_chat_member(v_chat_id) then
+    raise exception 'Not a member of this chat';
+  end if;
+
+  v_current_arr := coalesce(v_reactions -> p_emoji, '[]'::jsonb);
+
+  if v_current_arr ? v_user_id::text then
+    select coalesce(jsonb_agg(elem), '[]'::jsonb)
+      into v_new_arr
+      from jsonb_array_elements_text(v_current_arr) elem
+      where elem <> v_user_id::text;
+  else
+    v_new_arr := v_current_arr || to_jsonb(v_user_id::text);
+  end if;
+
+  if jsonb_array_length(v_new_arr) = 0 then
+    v_updated_reactions := v_reactions - p_emoji;
+  else
+    v_updated_reactions := jsonb_set(v_reactions, array[p_emoji], v_new_arr, true);
+  end if;
+
+  update public.messages
+    set reactions = v_updated_reactions
+    where id = p_message_id;
+
+  return v_updated_reactions;
+end;
+$$;
+
+grant execute on function public.toggle_message_reaction(uuid, text) to authenticated;
+
 
 -- ── calls ──────────────────────────────────────────────────────────────────
 create or replace function public.is_call_member(target_call text)

@@ -78,7 +78,9 @@ export async function openEphemeral(
   handlers: EphemeralHandlers,
   track?: Record<string, unknown>,
 ): Promise<RealtimeChannel> {
-  const ch = getSupabase().channel(`${topic}:${uniq()}`, {
+  const supabase = getSupabase();
+  // Topic must be shared across all clients so broadcasts reach peers
+  const ch = supabase.channel(topic, {
     config: { broadcast: { self: false, ack: false } },
   });
 
@@ -90,7 +92,7 @@ export async function openEphemeral(
 
   await new Promise<void>((resolve) => {
     ch.subscribe((s) => {
-      if (s === "SUBSCRIBED") resolve();
+      if (s === "SUBSCRIBED" || s === "CHANNEL_ERROR" || s === "TIMED_OUT") resolve();
     });
   });
 

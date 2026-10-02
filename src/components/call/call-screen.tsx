@@ -93,6 +93,7 @@ export function CallScreen({ callId }: { callId: string }) {
   const queryPeerId = searchParams?.get("peerId") ?? null;
   const queryPeerName = searchParams?.get("peerName") ?? null;
   const queryKind = (searchParams?.get("kind") as "audio" | "video" | null) ?? null;
+  const queryCaller = searchParams?.get("caller") === "1" || searchParams?.get("caller") === "true";
 
   /* ── who am I talking to? ─────────────────────────────────── */
   const peerId = useMemo(() => {
@@ -100,17 +101,18 @@ export function CallScreen({ callId }: { callId: string }) {
     if (call && uid) {
       const found = Object.keys(call.members).find((m) => m !== uid);
       if (found) return found;
+      if (call.initiatedBy && call.initiatedBy !== uid) return call.initiatedBy;
     }
     return queryPeerId || null;
   }, [ring, call, uid, queryPeerId]);
 
   const peerName = ring?.peerName ?? queryPeerName ?? "Omi contact";
-  const isCaller = Boolean((call && uid && call.initiatedBy === uid) || (queryPeerId && uid));
+  const isCaller = (call && uid) ? (call.initiatedBy === uid) : queryCaller;
   const answered = Boolean(call?.answeredAt) || ring?.status === "active";
   const kind = (call?.kind ?? ring?.kind ?? queryKind ?? "audio") as "audio" | "video";
 
-  // The caller starts immediately; callee starts once call is accepted
-  const engineActive = Boolean(uid && peerId && !call?.endedAt && (isCaller || answered));
+  // The caller starts immediately; callee starts once on the call screen or accepted
+  const engineActive = Boolean(uid && peerId && !call?.endedAt && (isCaller || answered || !queryCaller));
 
   /* ── teardown on unmount ──────────────────────────────────── */
   const finish = useCallback(

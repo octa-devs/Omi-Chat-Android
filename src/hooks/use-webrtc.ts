@@ -27,11 +27,23 @@ export interface CallOptions {
 }
 
 function iceServers(): RTCIceServer[] {
-  const urls = (process.env.NEXT_PUBLIC_TURN_URLS ?? "stun:stun.l.google.com:19302")
+  const envUrls = (process.env.NEXT_PUBLIC_TURN_URLS ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return [{ urls }];
+  if (envUrls.length) {
+    return [{ urls: envUrls }];
+  }
+  return [
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+    { urls: ["stun:stun2.l.google.com:19302", "stun:stun3.l.google.com:19302"] },
+    { urls: ["stun:stun4.l.google.com:19302"] },
+  ];
+}
+
+function sdpPayload(desc: RTCSessionDescription | RTCSessionDescriptionInit | null) {
+  if (!desc) return null;
+  return { type: desc.type, sdp: desc.sdp };
 }
 
 export function useWebRTC(opts: CallOptions) {
@@ -49,6 +61,7 @@ export function useWebRTC(opts: CallOptions) {
   const localRef = useRef<MediaStream | null>(null);
   const remoteRef = useRef<MediaStream | null>(null);
   const makingOffer = useRef(false);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   const [phase, setPhase] = useState<CallPhase>("idle");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -72,6 +85,7 @@ export function useWebRTC(opts: CallOptions) {
     remoteRef.current?.getTracks().forEach((t) => t.stop());
     localRef.current = null;
     remoteRef.current = null;
+    pendingCandidatesRef.current = [];
     setLocalStream(null);
     setRemoteStream(null);
   }, []);
@@ -97,7 +111,8 @@ export function useWebRTC(opts: CallOptions) {
       if (audioTracks.length) {
         setRemoteMuted(audioTracks.every((t) => !t.enabled));
       }
-      if (pc.signalingState === "stable") setPhase("active");
+      setPhase("active");
+      setError(null);
     };
 
     pc.onconnectionstatechange = () => {
@@ -119,6 +134,15 @@ export function useWebRTC(opts: CallOptions) {
           break;
         case "closed":
           break;
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+        setPhase("active");
+        setError(null);
+      } else if (pc.iceConnectionState === "failed") {
+        pc.restartIce();
       }
     };
 
@@ -168,12 +192,9 @@ export function useWebRTC(opts: CallOptions) {
   useEffect(() => {
     if (!callId || !selfUid || !peerUid) return;
     let disposed = false;
+    let retryInterval: ReturnType<typeof setInterval> | null = null;
 
     const pc = buildPc();
-    // Bug #3 Fix: `watchSignals` replays the whole node on every write, so
-    // de-dupe by id — msg.id was previously undefined because SignalMessage
-    // had no id field. Now that it does, de-duplication works correctly and
-    // the offer/answer won't be re-applied, which was tearing the PC down.
     const handled = new Set<string>();
 
     const flush = async () => {
@@ -190,11 +211,31 @@ export function useWebRTC(opts: CallOptions) {
         const offer = await pc.createOffer();
         if (disposed) return;
         await pc.setLocalDescription(offer);
-        await sendSignal(callId, selfUid, peerUid, "offer", offer);
+        await sendSignal(callId, selfUid, peerUid, "offer", sdpPayload(offer));
         makingOffer.current = false;
         setPhase("ringing-out");
+
+        // Periodically retry sending offer in case callee subscribed after initial broadcast
+        let retries = 0;
+        retryInterval = setInterval(() => {
+          if (disposed || !pcRef.current || pcRef.current.remoteDescription || pcRef.current.connectionState === "connected" || retries++ > 15) {
+            if (retryInterval) clearInterval(retryInterval);
+            return;
+          }
+          if (pcRef.current.localDescription && pcRef.current.signalingState === "have-local-offer") {
+            void sendSignal(
+              callId,
+              selfUid,
+              peerUid,
+              "offer",
+              sdpPayload(pcRef.current.localDescription),
+            );
+          }
+        }, 2500);
       } else {
         setPhase("waiting");
+        // Callee sends ping to announce ready status to caller
+        void sendSignal(callId, selfUid, peerUid, "ping");
       }
     };
 
@@ -204,14 +245,30 @@ export function useWebRTC(opts: CallOptions) {
 
     const unwatch = watchSignals(callId, selfUid, async (msg) => {
       if (disposed || msg.from === selfUid) return;
-      // Bug #3 Fix: msg.id is now defined; de-duplication works.
       if (msg.id && handled.has(msg.id)) return;
       if (msg.id) handled.add(msg.id);
       try {
-        if (msg.kind === "offer" && msg.payload) {
+        if (msg.kind === "ping") {
+          // Caller re-sends offer when callee announces presence
+          if (isCaller && pc.localDescription && pc.signalingState === "have-local-offer") {
+            void sendSignal(
+              callId,
+              selfUid,
+              peerUid,
+              "offer",
+              sdpPayload(pc.localDescription),
+            );
+          }
+        } else if (msg.kind === "offer" && msg.payload) {
           await pc.setRemoteDescription(
             new RTCSessionDescription(msg.payload as RTCSessionDescriptionInit),
           );
+          // Drain any early ICE candidates queued before remote description
+          for (const cand of pendingCandidatesRef.current) {
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => undefined);
+          }
+          pendingCandidatesRef.current = [];
+
           await acquire().catch(() => undefined);
           localRef.current
             ?.getTracks()
@@ -222,19 +279,27 @@ export function useWebRTC(opts: CallOptions) {
             });
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          await sendSignal(callId, selfUid, peerUid, "answer", answer);
+          await sendSignal(callId, selfUid, peerUid, "answer", sdpPayload(answer));
           setPhase("connecting");
         } else if (msg.kind === "answer" && msg.payload) {
           if (pc.signalingState === "have-local-offer") {
             await pc.setRemoteDescription(
               new RTCSessionDescription(msg.payload as RTCSessionDescriptionInit),
             );
+            // Drain any early ICE candidates queued before remote description
+            for (const cand of pendingCandidatesRef.current) {
+              await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => undefined);
+            }
+            pendingCandidatesRef.current = [];
             setPhase("connecting");
           }
         } else if (msg.kind === "candidate" && msg.payload) {
-          await pc
-            .addIceCandidate(new RTCIceCandidate(msg.payload as RTCIceCandidateInit))
-            .catch(() => undefined);
+          const cand = msg.payload as RTCIceCandidateInit;
+          if (!pc.remoteDescription) {
+            pendingCandidatesRef.current.push(cand);
+          } else {
+            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => undefined);
+          }
         } else if (msg.kind === "hangup") {
           remoteEndedRef.current?.();
         } else if (msg.kind === "media") {
@@ -253,6 +318,7 @@ export function useWebRTC(opts: CallOptions) {
 
     return () => {
       disposed = true;
+      if (retryInterval) clearInterval(retryInterval);
       unwatch();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

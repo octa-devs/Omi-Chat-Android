@@ -264,7 +264,17 @@ function MessageBubbleInner({
   }
 
   const isCall = message.kind === "call";
-  const isAudio = message.kind === "audio";
+  const isAudio =
+    message.kind === "audio" ||
+    (message.kind === "file" &&
+      Boolean(
+        message.attachmentName?.endsWith(".webm") ||
+        message.attachmentName?.endsWith(".ogg") ||
+        message.attachmentName?.endsWith(".mp3") ||
+        message.attachmentName?.endsWith(".m4a") ||
+        message.attachmentName?.endsWith(".wav") ||
+        message.attachmentName?.startsWith("voice_")
+      ));
 
   const submitEdit = () => {
     const next = draft.trim();

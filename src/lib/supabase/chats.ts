@@ -263,9 +263,10 @@ export async function sendMessage(input: {
   attachmentSize?: number | null;
   replyTo?: { id: string; text: string; senderName: string } | null;
 }): Promise<OmiMessage> {
-  // One INSERT. The trigger moves the chat's last_activity, rebuilds the inbox
-  // preview, and advances my own read cursor.
-  const { data, error } = await getSupabase()
+  const supabase = getSupabase();
+  let insertError: unknown = null;
+
+  const { data, error } = await supabase
     .from("messages")
     .insert({
       chat_id: input.chat.id,
@@ -280,7 +281,30 @@ export async function sendMessage(input: {
     .select(MESSAGE_SELECT)
     .single();
 
-  if (error) throw error;
+  if (error) {
+    insertError = error;
+    // Fallback: If DB check constraint doesn't allow 'audio' yet, insert as 'file' with audio attachment
+    if (error.code === "23514" && input.kind === "audio") {
+      const fallback = await supabase
+        .from("messages")
+        .insert({
+          chat_id: input.chat.id,
+          sender_id: input.senderId,
+          text: input.text.trim(),
+          kind: "file",
+          attachment_url: input.attachmentUrl ?? null,
+          attachment_name: input.attachmentName ?? "voice_message.webm",
+          attachment_size: input.attachmentSize ?? null,
+          reply_to: input.replyTo ?? null,
+        })
+        .select(MESSAGE_SELECT)
+        .single();
+      if (!fallback.error && fallback.data) {
+        return rowToJoinedMessage(fallback.data as unknown as RawJoinedMessage);
+      }
+    }
+    throw insertError;
+  }
   return rowToJoinedMessage(data as unknown as RawJoinedMessage);
 }
 
@@ -541,13 +565,35 @@ export async function reactToMessage(
   uid: string,
   emoji: string,
 ): Promise<void> {
-  const { data, error: fetchErr } = await getSupabase()
+  const supabase = getSupabase();
+
+  // 1. Try atomic SECURITY DEFINER RPC first (bypasses RLS issues for other chat members)
+  try {
+    const { error: rpcErr } = await supabase.rpc("toggle_message_reaction", {
+      p_message_id: messageId,
+      p_emoji: emoji,
+    });
+    if (!rpcErr) return;
+  } catch {
+    // Proceed to direct update fallback
+  }
+
+  // 2. Direct read + update fallback
+  const { data, error: fetchErr } = await supabase
     .from("messages")
     .select("reactions")
     .eq("id", messageId)
     .eq("chat_id", chatId)
     .single();
-  if (fetchErr) throw fetchErr;
+
+  if (fetchErr) {
+    if (fetchErr.code === "42703" || fetchErr.message?.includes("reactions")) {
+      throw new Error(
+        "Reactions column missing in database. Please run migration 0003 in Supabase SQL editor.",
+      );
+    }
+    throw fetchErr;
+  }
 
   const current = (data as { reactions: Record<string, string[]> | null }).reactions ?? {};
   const arr = current[emoji] ?? [];
@@ -566,12 +612,20 @@ export async function reactToMessage(
     next = { ...current, [emoji]: [...arr, uid] };
   }
 
-  const { error } = await getSupabase()
+  const { error } = await supabase
     .from("messages")
     .update({ reactions: next })
     .eq("id", messageId)
     .eq("chat_id", chatId);
-  if (error) throw error;
+
+  if (error) {
+    if (error.code === "42501" || error.message?.includes("policy")) {
+      throw new Error(
+        "Reaction permission error. Please run migration 0003 in Supabase SQL editor.",
+      );
+    }
+    throw error;
+  }
 }
 
 /* ── audio messages ───────────────────────────────────────── */

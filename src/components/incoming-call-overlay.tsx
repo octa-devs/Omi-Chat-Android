@@ -50,7 +50,9 @@ export function IncomingCallOverlay({
   const accept = async () => {
     if (uid) await acceptCall(call.id, uid).catch(() => undefined);
     stopRef.current?.();
-    router.push(`/call/${call.id}`);
+    router.push(
+      `/call/${call.id}?peerId=${encodeURIComponent(call.peerId)}&peerName=${encodeURIComponent(call.peerName)}&kind=${call.kind}`,
+    );
   };
 
   return createPortal(

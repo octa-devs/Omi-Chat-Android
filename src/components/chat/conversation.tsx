@@ -287,6 +287,10 @@ export function Conversation({
       toast.error("Still loading this contact — try again in a moment.");
       return;
     }
+    if (peer.uid === uid) {
+      toast.error("You cannot call yourself.");
+      return;
+    }
     try {
       await startCall({
         peerId: peer.uid,
