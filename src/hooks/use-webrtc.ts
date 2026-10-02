@@ -31,14 +31,21 @@ function iceServers(): RTCIceServer[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (envUrls.length) {
-    return [{ urls: envUrls }];
-  }
-  return [
-    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
-    { urls: ["stun:stun2.l.google.com:19302", "stun:stun3.l.google.com:19302"] },
-    { urls: ["stun:stun4.l.google.com:19302"] },
+  const servers: RTCIceServer[] = [
+    {
+      urls: [
+        "stun:stun.l.google.com:19302",
+        "stun:stun1.l.google.com:19302",
+        "stun:stun2.l.google.com:19302",
+        "stun:stun3.l.google.com:19302",
+        "stun:stun4.l.google.com:19302",
+      ],
+    },
   ];
+  if (envUrls.length) {
+    servers.push({ urls: envUrls });
+  }
+  return servers;
 }
 
 function sdpPayload(desc: RTCSessionDescription | RTCSessionDescriptionInit | null) {

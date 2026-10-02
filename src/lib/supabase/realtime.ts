@@ -85,7 +85,13 @@ export async function openEphemeral(
   });
 
   for (const [event, cb] of Object.entries(handlers)) {
-    ch.on("broadcast", { event }, ({ payload }) => cb(payload));
+    ch.on("broadcast", { event }, ({ payload }) => {
+      const data =
+        payload && typeof payload === "object" && "body" in payload
+          ? (payload as { body: unknown }).body
+          : payload;
+      cb(data);
+    });
   }
 
   if (track) void ch.track(track);
@@ -105,5 +111,5 @@ export async function publish(
   event: string,
   body: unknown,
 ): Promise<void> {
-  await ch.send({ type: "broadcast", event, payload: { body } });
+  await ch.send({ type: "broadcast", event, payload: body });
 }
