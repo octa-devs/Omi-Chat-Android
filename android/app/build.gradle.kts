@@ -22,7 +22,7 @@ val keystoreProperties = Properties().apply {
 val hasReleaseKeystore = keystoreProperties.getProperty("storeFile") != null
 
 val webOrigin =
-    (project.findProperty("omiOrigin")?.toString() ?: "https://omichat.fun").trimEnd('/')
+    (project.findProperty("omiOrigin")?.toString() ?: "https://omichatapp.octadevs.fun").trimEnd('/')
 val oauthHost =
     project.findProperty("omiOauthHost")?.toString() ?: "lfbrsfenvhgwzaawuasw.supabase.co"
 

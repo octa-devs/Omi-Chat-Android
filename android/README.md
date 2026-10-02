@@ -1,6 +1,6 @@
 # Omi Chat — Android
 
-A native Android shell for [omichat.fun](https://omichat.fun). The UI is the
+A native Android shell for [omichatapp.octadevs.fun](https://omichatapp.octadevs.fun). The UI is the
 website; this project supplies the launcher entry, the icon, the window
 behaviour and the pieces of Android the web platform cannot reach on its own —
 file attachments, downloads, back navigation, and camera/microphone for calls.

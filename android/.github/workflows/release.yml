@@ -31,6 +31,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    # The Gradle project is a subdirectory of this repository; the web app sits
+    # beside it. Every run step executes from android/ so that ./gradlew, the
+    # keystore.properties path that rootProject.file() resolves, and the
+    # app/build/outputs lookups all stay correct without rewriting each of them.
+    #
+    # This does NOT affect `uses:` actions such as upload-artifact, which keep
+    # running from the workspace root. Anything those actions are handed must
+    # therefore be an absolute path.
+    defaults:
+      run:
+        working-directory: android
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -152,22 +164,25 @@ jobs:
           fi
           version="${{ steps.version.outputs.name }}"
           out="OmiChat-${version}.apk"
-          cp "$apk" "$out"
+          # Absolute, because upload-artifact resolves `path` from the workspace
+          # root rather than from this step's working-directory.
+          dest="$GITHUB_WORKSPACE/$out"
+          cp "$apk" "$dest"
 
           # A truncated or empty APK is the failure mode that actually reaches a
           # user, so refuse to upload one rather than shipping it.
-          size=$(stat -c%s "$out")
+          size=$(stat -c%s "$dest")
           if [ "$size" -lt 200000 ]; then
             echo "::error::APK is only ${size} bytes, which is far too small to be a real build."
             exit 1
           fi
-          unzip -l "$out" | grep -q classes.dex || {
+          unzip -l "$dest" | grep -q classes.dex || {
             echo "::error::APK contains no classes.dex."
             exit 1
           }
 
           echo "size=$size" >> "$GITHUB_OUTPUT"
-          echo "path=$out"  >> "$GITHUB_OUTPUT"
+          echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "### $out ($((size / 1024)) KB)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK as workflow artifact
