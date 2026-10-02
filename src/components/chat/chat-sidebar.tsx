@@ -253,6 +253,8 @@ function ChatRow({
       : compactStamp(lm.createdAt)
     : "";
 
+  const peerId = chat.kind === "direct" ? Object.keys(chat.members).find((m) => m !== meId) : null;
+
   return (
     <motion.li
       layout
@@ -277,7 +279,7 @@ function ChatRow({
         )}
 
         <Avatar
-          id={chat.id}
+          id={peerId ?? chat.id}
           name={chat.title}
           src={chat.avatarUrl}
           size="md"

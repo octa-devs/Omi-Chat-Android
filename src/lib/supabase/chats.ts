@@ -2,6 +2,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "./client";
 import { onTable, openEphemeral, publish, dropChannel } from "./realtime";
 import { rowToChat, rowToMessage, type ChatRow, type MessageRow } from "./rows";
+import { getUser, getUsers } from "./users";
 import type { MessageKind, OmiChat, OmiMessage } from "../types";
 import { directChatId } from "../utils";
 
@@ -58,13 +59,35 @@ async function releaseChat(chatId: string) {
 
 /* ── reads ────────────────────────────────────────────────── */
 
-export async function getChat(chatId: string): Promise<OmiChat | null> {
+export async function getChat(chatId: string, currentUid?: string): Promise<OmiChat | null> {
   const { data, error } = await getSupabase().rpc("get_chat", {
     target_chat: chatId,
   });
   if (error) throw error;
   const row = (data as ChatRow[])[0];
-  return row ? rowToChat(row) : null;
+  if (!row) return null;
+  const chat = rowToChat(row);
+
+  // In direct 1:1 chats, ensure title & avatar represent the peer, not the viewer
+  if (chat.kind === "direct") {
+    try {
+      const viewerId = currentUid || (await getSupabase().auth.getSession()).data.session?.user?.id;
+      if (viewerId) {
+        const peerId = Object.keys(chat.members).find((id) => id !== viewerId);
+        if (peerId) {
+          const peer = await getUser(peerId).catch(() => null);
+          if (peer) {
+            chat.title = peer.displayName || peer.username || chat.title;
+            chat.avatarUrl = peer.avatarUrl ?? chat.avatarUrl;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return chat;
 }
 
 interface RawJoinedMessage extends MessageRow {
@@ -107,7 +130,40 @@ export function watchInbox(
   const refresh = async () => {
     const { data, error } = await getSupabase().rpc("get_inbox");
     if (!alive) return;
-    cb(error ? [] : (data as ChatRow[]).map(rowToChat));
+    if (error || !data) {
+      cb([]);
+      return;
+    }
+    const rawChats = (data as ChatRow[]).map(rowToChat);
+
+    // Batch resolve direct chat peers so 1:1 chat titles always show the contact, never own name
+    const directPeerIds = new Set<string>();
+    for (const c of rawChats) {
+      if (c.kind === "direct") {
+        const peerId = Object.keys(c.members).find((id) => id !== uid);
+        if (peerId) directPeerIds.add(peerId);
+      }
+    }
+
+    if (directPeerIds.size > 0) {
+      try {
+        const userMap = await getUsers(Array.from(directPeerIds));
+        for (const c of rawChats) {
+          if (c.kind === "direct") {
+            const peerId = Object.keys(c.members).find((id) => id !== uid);
+            const peer = peerId ? userMap[peerId] : null;
+            if (peer) {
+              c.title = peer.displayName || peer.username || c.title;
+              c.avatarUrl = peer.avatarUrl ?? c.avatarUrl;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Failed resolving direct chat peers", err);
+      }
+    }
+
+    if (alive) cb(rawChats);
   };
 
   // Coalesce bursts: five messages arriving together should cost one read.

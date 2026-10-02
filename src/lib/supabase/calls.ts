@@ -62,12 +62,13 @@ interface RingJoin {
   direction: "incoming" | "outgoing";
   peer_id: string | null;
   peer_name: string;
-  status: "ringing" | "active";
+  status: "ringing" | "active" | "ended";
   answered_at: string | null;
   calls: {
     id: string;
     kind: "audio" | "video";
     chat_id: string | null;
+    state: "ringing" | "active" | "ended";
     initiated_by: string;
     created_at: string;
   } | null;
@@ -75,7 +76,7 @@ interface RingJoin {
 
 const RING_SELECT =
   "direction, peer_id, peer_name, status, answered_at, " +
-  "calls!inner(id, kind, chat_id, initiated_by, created_at)";
+  "calls!inner(id, kind, chat_id, state, initiated_by, created_at)";
 
 function joinToRing(r: RingJoin): CallRingEntry {
   const c = r.calls;
@@ -95,7 +96,7 @@ function joinToRing(r: RingJoin): CallRingEntry {
     direction: r.direction,
     peerId: r.peer_id ?? "",
     peerName: r.peer_name,
-    status: r.status,
+    status: r.status === "ended" ? "ringing" : r.status,
   };
 }
 
@@ -146,11 +147,43 @@ export function watchCallRing(
       .eq("user_id", uid)
       .eq("status", "ringing");
     if (!alive) return;
-    if (error) {
+    if (error || !data) {
       cb([]);
       return;
     }
-    const rows = (data as unknown as RingJoin[]).map(joinToRing);
+
+    const now = Date.now();
+    const validRows: RingJoin[] = [];
+    const staleCallIds: string[] = [];
+
+    for (const r of (data as unknown as RingJoin[])) {
+      const callState = r.calls?.state;
+      const callTime = r.calls?.created_at ? ts(r.calls.created_at) : 0;
+      // Stale if the call was marked ended, or if ringing for more than 45s without answer
+      const isStale =
+        callState === "ended" ||
+        (now - callTime > 45_000 && !r.answered_at);
+
+      if (isStale) {
+        if (r.calls?.id) staleCallIds.push(r.calls.id);
+      } else {
+        validRows.push(r);
+      }
+    }
+
+    // Auto-clean stale ringing rows in background so phantom calls never return
+    if (staleCallIds.length > 0) {
+      void (async () => {
+        try {
+          await getSupabase().from("call_members").update({ status: "ended" }).in("call_id", staleCallIds);
+          await getSupabase().from("call_ring").delete().in("call_id", staleCallIds);
+        } catch {
+          // ignore
+        }
+      })();
+    }
+
+    const rows = validRows.map(joinToRing);
     cb(rows.sort((a, b) => b.createdAt - a.createdAt));
   };
 
@@ -473,6 +506,11 @@ export async function endCall(callId: string, byUser: string, reason: CallStatus
     .from("calls")
     .update({ state: "ended", ended_at: endedAt, end_reason: reason })
     .eq("id", callId);
+
+  await supabase
+    .from("call_members")
+    .update({ status: "ended" })
+    .eq("call_id", callId);
 
   // One log row per participant, derived from that participant's own view of the
   // call, so both sides get the right direction and duration. A call that was

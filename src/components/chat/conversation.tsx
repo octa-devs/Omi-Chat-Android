@@ -401,8 +401,8 @@ export function Conversation({
           ) : (
             <Avatar
               id={peerId}
-              name={chat.title}
-              src={chat.avatarUrl}
+              name={chat.kind === "group" ? chat.title : (peer?.displayName ?? chat.title)}
+              src={chat.kind === "group" ? chat.avatarUrl : (peer?.avatarUrl ?? chat.avatarUrl)}
               size="md"
               presence={presence}
             />

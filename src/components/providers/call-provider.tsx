@@ -54,7 +54,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, [uid]);
 
   const incoming = useMemo(
-    () => ringing.find((c) => c.direction === "incoming" && c.peerId !== uid) ?? null,
+    () =>
+      ringing.find(
+        (c) =>
+          c.direction === "incoming" &&
+          c.peerId !== uid &&
+          c.status === "ringing" &&
+          Date.now() - c.createdAt < 45_000,
+      ) ?? null,
     [ringing, uid],
   );
 
