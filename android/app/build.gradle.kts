@@ -3,6 +3,8 @@ import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 /*
@@ -25,20 +27,17 @@ val webOrigin =
     (project.findProperty("omiOrigin")?.toString() ?: "https://omichatapp.octadevs.fun").trimEnd('/')
 val oauthHost =
     project.findProperty("omiOauthHost")?.toString() ?: "lfbrsfenvhgwzaawuasw.supabase.co"
+val supabaseUrl =
+    project.findProperty("omiSupabaseUrl")?.toString() ?: "https://lfbrsfenvhgwzaawuasw.supabase.co"
+val supabaseAnonKey =
+    project.findProperty("omiSupabaseAnonKey")?.toString() ?: ""
 
 android {
-    // "fun" is a reserved Kotlin keyword, so it cannot appear in a package
-    // declaration and therefore not in the namespace either. applicationId
-    // below keeps the fun.octadevs identity, because that is the installed
-    // package name and changing it after release would ship a different app.
     namespace = "app.octadevs.omichat"
     compileSdk = 35
 
     defaultConfig {
         applicationId = "fun.octadevs.omichat"
-        // 24 is the oldest release with a non-negligible installed base and the
-        // first where WebView is updated via the Play Store rather than the OS,
-        // which matters because this app is entirely a WebView.
         minSdk = 24
         targetSdk = 35
 
@@ -47,6 +46,8 @@ android {
 
         buildConfigField("String", "WEB_ORIGIN", "\"$webOrigin\"")
         buildConfigField("String", "OAUTH_HOST", "\"$oauthHost\"")
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     signingConfigs {
@@ -87,13 +88,10 @@ android {
 
     buildFeatures {
         buildConfig = true
-        viewBinding = true
+        compose = true
     }
 
     lint {
-        // Builds run in CI without a local Android SDK, so lint is not run as
-        // part of assembleRelease. Run ./gradlew :app:lint after touching the
-        // manifest, the network security config or any resource.
         checkReleaseBuilds = false
     }
 
@@ -102,6 +100,7 @@ android {
             "/META-INF/{AL2.0,LGPL2.1}",
             "/META-INF/DEPENDENCIES",
             "META-INF/*.version",
+            "META-INF/INDEX.LIST",
         )
     }
 }
@@ -115,16 +114,47 @@ kotlin {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("androidx.activity:activity-compose:1.9.3")
 
-    // WebSettingsCompat / WebViewFeature. Used to query feature support at
-    // runtime instead of guessing from Build.VERSION, which matters because
-    // OEM WebViews lag the platform on older Android versions.
-    implementation("androidx.webkit:webkit:1.12.1")
+    // Jetpack Compose
+    val composeBom = platform("androidx.compose:compose-bom:2024.10.01")
+    implementation(composeBom)
+    androidTestImplementation(composeBom)
 
-    // Themed splash screen. Without this the launcher hands off to a blank
-    // window while the WebView spins up, which reads as a slow cold start.
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.animation:animation")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Lifecycle & Navigation for Compose
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+    implementation("androidx.navigation:navigation-compose:2.8.3")
+
+    // Coil for modern async image loading in Compose
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Supabase Kotlin SDK
+    val supabaseVersion = "3.0.2"
+    implementation(platform("io.github.jan-tennert.supabase:bom:$supabaseVersion"))
+    implementation("io.github.jan-tennert.supabase:postgrest-kt")
+    implementation("io.github.jan-tennert.supabase:auth-kt")
+    implementation("io.github.jan-tennert.supabase:realtime-kt")
+    implementation("io.github.jan-tennert.supabase:storage-kt")
+
+    // Ktor Client Engine for Supabase
+    implementation("io.ktor:ktor-client-okhttp:3.0.1")
+
+    // Kotlinx Serialization & Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+
+    // Themed splash screen
     implementation("androidx.core:core-splashscreen:1.0.1")
-
-    // Smooth native pull-to-refresh
-    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 }
