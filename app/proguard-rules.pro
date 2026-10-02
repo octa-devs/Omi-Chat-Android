@@ -9,5 +9,8 @@
 }
 
 # Optional Play-services classes that WebView may reference reflectively.
+# androidx.webkit calls into com.google.android.webkit, the WebView support
+# library, which is an optional component that may be absent on a device.
 -dontwarn com.google.android.gms.**
+-dontwarn com.google.android.webkit.**
 -dontwarn org.apache.http.**

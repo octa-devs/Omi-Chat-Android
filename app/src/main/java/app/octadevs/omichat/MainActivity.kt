@@ -199,7 +199,6 @@ class MainActivity : ComponentActivity() {
                 mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
 
                 cacheMode = WebSettings.LOAD_DEFAULT
-                contentEncoding = "utf-8"
 
                 // Lets the site detect the wrapper without a third-party SDK.
                 // Also keeps the origin honest in server logs.
