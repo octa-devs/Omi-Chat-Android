@@ -1,0 +1,14 @@
+# Cloudflare parses public/_headers strictly, and a CRLF line ending is
+# enough to make it reject the whole asset upload. Pin the files whose
+# bytes are parsed rather than merely executed.
+/_headers   text eol=lf
+wrangler.jsonc text eol=lf
+
+# Binary assets are already in the repository and must never be touched.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.ico   binary
