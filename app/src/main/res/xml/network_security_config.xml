@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cleartext is refused outright: the wrapper only ever talks to https, and an
+    app whose entire surface is a remote page should not be able to be downgraded
+    to plaintext by anything on the network.
+
+    Only system CAs are trusted. Omitting the "user" store means a proxy
+    certificate installed on the device cannot silently intercept traffic.
+    src/debug/res/xml/network_security_config.xml re-permits cleartext for
+    localhost and the emulator loopback so the wrapper can be pointed at a local
+    Next.js dev server.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

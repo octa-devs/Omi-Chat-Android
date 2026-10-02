@@ -1,0 +1,16 @@
+# Keep LF everywhere by default. Gradle, Kotlin and the shell scripts all cope
+# with either, but gradlew does not: a CRLF shebang makes it unrunnable on Linux
+# and CI, and the failure is silent until the job errors on the first command.
+* text=auto eol=lf
+
+# The one file that genuinely wants Windows line endings.
+*.bat text eol=crlf
+gradlew text eol=lf
+
+# Binaries must never be touched.
+*.png binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.apk binary
+*.aab binary

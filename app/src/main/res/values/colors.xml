@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors the site's light palette so the launcher window, the splash and
+         the first painted frame are the same colour the page is about to paint.
+         A mismatch here is exactly what reads as a janky cold start. -->
+    <color name="omi_surface">#FFFFFFFF</color>
+    <color name="omi_ink">#FF131725</color>
+
+    <!-- src/app/globals.css --color-brand-400 / --color-brand-800, the two ends
+         of the gradient used to draw the launcher icon. -->
+    <color name="omi_brand_400">#FF5A8CEB</color>
+    <color name="omi_brand_800">#FF174492</color>
+</resources>
