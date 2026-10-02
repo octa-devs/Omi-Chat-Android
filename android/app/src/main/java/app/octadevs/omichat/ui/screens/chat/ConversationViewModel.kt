@@ -34,21 +34,25 @@ class ConversationViewModel(
 
     fun initChat(chatId: String, title: String, avatarUrl: String?) {
         val uid = authRepo.currentUserId ?: ""
-        _uiState.value = _uiState.value.copy(
+        // Reset immediately to avoid displaying stale messages
+        _uiState.value = ConversationUiState(
             chatId = chatId,
             title = title,
             avatarUrl = avatarUrl,
-            currentUserId = uid
+            currentUserId = uid,
+            isLoading = true
         )
-        loadMessages()
-    }
 
-    fun loadMessages() {
-        val chatId = _uiState.value.chatId
-        if (chatId.isBlank()) return
-
-        _uiState.value = _uiState.value.copy(isLoading = true)
         viewModelScope.launch {
+            // Asynchronously resolve full chat details (peer user info)
+            val fullChat = chatRepo.getChat(chatId)
+            if (fullChat != null) {
+                _uiState.value = _uiState.value.copy(
+                    title = fullChat.displayTitle,
+                    avatarUrl = fullChat.displayAvatar
+                )
+            }
+
             val messages = chatRepo.getMessages(chatId)
             _uiState.value = _uiState.value.copy(
                 messages = messages,
@@ -105,7 +109,6 @@ class ConversationViewModel(
             )
 
             result.onSuccess { sentMsg ->
-                // Replace optimistic with real message
                 val updated = _uiState.value.messages.map {
                     if (it.id == tempId) sentMsg else it
                 }
@@ -134,7 +137,8 @@ class ConversationViewModel(
                     attachmentName = fileName,
                     attachmentSize = data.size.toLong()
                 )
-                loadMessages()
+                val messages = chatRepo.getMessages(chatId)
+                _uiState.value = _uiState.value.copy(messages = messages)
             }
         }
     }

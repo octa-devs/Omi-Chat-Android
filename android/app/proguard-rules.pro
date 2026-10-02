@@ -1,16 +1,18 @@
-# This app has no reflection, no serialisable models and no dynamic class
-# loading, so the default android-optimize rules already cover it. The
-# WebViewClient and WebChromeClient instances are anonymous objects created
-# directly in code, so R8 keeps them without help.
-
-# A page can reach a @JavascriptInterface object if the site ever adds a bridge.
+# Kotlinx Serialization
+-keepattributes *Annotation*,InnerClasses
+-dontnote kotlinx.serialization.SerializationKt
 -keepclassmembers class * {
-    @android.webkit.JavascriptInterface <methods>;
+    *** Companion;
+}
+-keepclasseswithmembers class * {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keepclassmembers class * : kotlinx.serialization.KSerializer {
+    *** Companion;
 }
 
-# Optional Play-services classes that WebView may reference reflectively.
-# androidx.webkit calls into com.google.android.webkit, the WebView support
-# library, which is an optional component that may be absent on a device.
--dontwarn com.google.android.gms.**
--dontwarn com.google.android.webkit.**
--dontwarn org.apache.http.**
+# Supabase & Ktor / OkHttp
+-dontwarn io.github.jan.supabase.**
+-dontwarn io.ktor.**
+-dontwarn okhttp3.**
+-dontwarn okio.**

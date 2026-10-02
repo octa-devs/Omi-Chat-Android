@@ -1,6 +1,7 @@
 package app.octadevs.omichat.ui.navigation
 
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -26,7 +27,7 @@ fun OmiNavGraph(
     authRepo: AuthRepository = remember { AuthRepository() }
 ) {
     val navController = rememberNavController()
-    val sessionStatus by authRepo.sessionStatus.collectAsState(initial = SessionStatus.LoadingFromStorage)
+    val sessionStatus by authRepo.sessionStatus.collectAsState(initial = SessionStatus.Initializing)
 
     val startDestination = if (authRepo.currentUserId != null) {
         Screen.Inbox.route
@@ -39,27 +40,27 @@ fun OmiNavGraph(
         startDestination = startDestination,
         enterTransition = {
             slideIntoContainer(
-                AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(300)
-            ) + fadeIn(animationSpec = tween(300))
+                AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(220, easing = FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(220))
         },
         exitTransition = {
             slideOutOfContainer(
-                AnimatedContentTransitionScope.SlideDirection.Left,
-                animationSpec = tween(300)
-            ) + fadeOut(animationSpec = tween(300))
+                AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(220, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(220))
         },
         popEnterTransition = {
             slideIntoContainer(
-                AnimatedContentTransitionScope.SlideDirection.Right,
-                animationSpec = tween(300)
-            ) + fadeIn(animationSpec = tween(300))
+                AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(220, easing = FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(220))
         },
         popExitTransition = {
             slideOutOfContainer(
-                AnimatedContentTransitionScope.SlideDirection.Right,
-                animationSpec = tween(300)
-            ) + fadeOut(animationSpec = tween(300))
+                AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(220, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(220))
         }
     ) {
         composable(Screen.Auth.route) {
@@ -113,7 +114,7 @@ fun OmiNavGraph(
                 onBack = { navController.popBackStack() },
                 onChatCreated = { chat ->
                     navController.navigate(
-                        Screen.Conversation.createRoute(chat.id, chat.title ?: "Chat", chat.avatarUrl)
+                        Screen.Conversation.createRoute(chat.id, chat.displayTitle, chat.displayAvatar)
                     ) {
                         popUpTo(Screen.NewChat.route) { inclusive = true }
                     }

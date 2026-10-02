@@ -99,7 +99,13 @@ data class OmiChat(
     @SerialName("created_at") val createdAt: String = "",
     @SerialName("last_activity") val lastActivity: String? = null,
     @SerialName("last_message") val lastMessage: LastMessageInfo? = null,
+    val members: Map<String, Boolean>? = null,
     val unread: Int = 0,
     val pinned: Boolean = false,
-    val muted: Boolean = false
-)
+    val muted: Boolean = false,
+    // Resolved peer info for direct chats
+    val peerUser: OmiUser? = null
+) {
+    val displayTitle: String get() = if (kind == ChatKind.DIRECT) (peerUser?.name ?: title ?: "Chat") else (title ?: "Group")
+    val displayAvatar: String? get() = if (kind == ChatKind.DIRECT) (peerUser?.avatarUrl ?: avatarUrl) else avatarUrl
+}

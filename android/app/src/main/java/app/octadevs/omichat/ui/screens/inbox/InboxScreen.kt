@@ -207,7 +207,7 @@ fun InboxScreen(
                         ChatItemRow(
                             chat = chat,
                             onClick = {
-                                onChatClick(chat.id, chat.title ?: "Chat", chat.avatarUrl)
+                                onChatClick(chat.id, chat.displayTitle, chat.displayAvatar)
                             }
                         )
                     }
@@ -230,8 +230,8 @@ fun ChatItemRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         OmiAvatar(
-            name = chat.title ?: "Chat",
-            avatarUrl = chat.avatarUrl,
+            name = chat.displayTitle,
+            avatarUrl = chat.displayAvatar,
             size = 52.dp
         )
 
@@ -244,7 +244,7 @@ fun ChatItemRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = chat.title ?: "Conversation",
+                    text = chat.displayTitle,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                         color = OmiTextPrimary
