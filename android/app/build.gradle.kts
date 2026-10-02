@@ -48,6 +48,7 @@ android {
         buildConfigField("String", "OAUTH_HOST", "\"$oauthHost\"")
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
+        buildConfigField("String", "GOOGLE_CLIENT_ID", "\"179200222340-vsv7qsqr1g49ns3nhgt0kuhshtt4es5t.apps.googleusercontent.com\"")
     }
 
     signingConfigs {
@@ -154,6 +155,11 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
+
+    // Google Credential Manager & ID
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     // Themed splash screen
     implementation("androidx.core:core-splashscreen:1.0.1")

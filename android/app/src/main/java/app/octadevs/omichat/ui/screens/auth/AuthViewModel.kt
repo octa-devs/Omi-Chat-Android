@@ -62,4 +62,19 @@ class AuthViewModel(
             }
         }
     }
+
+    fun signInWithGoogleIdToken(idToken: String, nonce: String? = null) {
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        viewModelScope.launch {
+            val result = authRepo.signInWithGoogleIdToken(idToken, nonce)
+            result.onSuccess {
+                _uiState.value = _uiState.value.copy(isLoading = false, isSuccess = true)
+            }.onFailure { e ->
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = e.localizedMessage ?: "Google Sign-In failed"
+                )
+            }
+        }
+    }
 }

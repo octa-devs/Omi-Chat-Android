@@ -1,6 +1,8 @@
 package app.octadevs.omichat.ui.screens.auth
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,8 +29,10 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -36,10 +41,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -48,13 +58,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.octadevs.omichat.BuildConfig
 import app.octadevs.omichat.ui.components.GlassCard
 import app.octadevs.omichat.ui.theme.OmiBackground
-import app.octadevs.omichat.ui.theme.OmiBrand100
 import app.octadevs.omichat.ui.theme.OmiBrand500
 import app.octadevs.omichat.ui.theme.OmiBrand600
-import app.octadevs.omichat.ui.theme.OmiBrand700
 import app.octadevs.omichat.ui.theme.OmiLine
 import app.octadevs.omichat.ui.theme.OmiRust
 import app.octadevs.omichat.ui.theme.OmiSurface
@@ -62,6 +74,9 @@ import app.octadevs.omichat.ui.theme.OmiSurface2
 import app.octadevs.omichat.ui.theme.OmiTextMuted
 import app.octadevs.omichat.ui.theme.OmiTextPrimary
 import app.octadevs.omichat.ui.theme.OmiTextSecondary
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.coroutines.launch
 
 @Composable
 fun AuthScreen(
@@ -70,10 +85,43 @@ fun AuthScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val credentialManager = remember { CredentialManager.create(context) }
 
     LaunchedEffect(state.isSuccess) {
         if (state.isSuccess) {
             onAuthSuccess()
+        }
+    }
+
+    fun launchGoogleSignIn() {
+        coroutineScope.launch {
+            try {
+                val googleIdOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(BuildConfig.GOOGLE_CLIENT_ID)
+                    .setAutoSelectEnabled(false)
+                    .build()
+
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(googleIdOption)
+                    .build()
+
+                val result = credentialManager.getCredential(
+                    request = request,
+                    context = context
+                )
+
+                val credential = result.credential
+                if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                    val idToken = googleIdTokenCredential.idToken
+                    viewModel.signInWithGoogleIdToken(idToken)
+                }
+            } catch (e: Exception) {
+                // User cancelled or error
+            }
         }
     }
 
@@ -123,7 +171,7 @@ fun AuthScreen(
                     color = OmiTextSecondary,
                     textAlign = TextAlign.Center
                 ),
-                modifier = Modifier.padding(top = 4.dp, bottom = 28.dp)
+                modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
             )
 
             // Auth Card
@@ -137,6 +185,50 @@ fun AuthScreen(
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    // Google Sign In Button
+                    OutlinedButton(
+                        onClick = { launchGoogleSignIn() },
+                        enabled = !state.isLoading,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = OmiSurface,
+                            contentColor = OmiTextPrimary
+                        ),
+                        border = BorderStroke(1.dp, OmiLine)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            GoogleLogo(modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Continue with Google",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+
+                    // Divider
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = OmiLine)
+                        Text(
+                            text = "or",
+                            modifier = Modifier.padding(horizontal = 10.dp),
+                            style = MaterialTheme.typography.bodySmall.copy(color = OmiTextMuted)
+                        )
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = OmiLine)
+                    }
+
                     AnimatedVisibility(visible = !state.isSignIn) {
                         Column {
                             OutlinedTextField(
@@ -227,7 +319,7 @@ fun AuthScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     // Submit Button
                     Button(
@@ -238,7 +330,7 @@ fun AuthScreen(
                         enabled = !state.isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(50.dp),
+                            .height(48.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = OmiBrand500,
@@ -255,14 +347,14 @@ fun AuthScreen(
                             Text(
                                 text = if (state.isSignIn) "Sign In" else "Create Account",
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
+                                fontSize = 15.sp
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Toggle Mode Button
             TextButton(
@@ -276,5 +368,24 @@ fun AuthScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun GoogleLogo(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cX = w / 2f
+        val cY = h / 2f
+
+        // Google 'G' colors
+        drawCircle(color = Color(0xFF4285F4), radius = w * 0.45f, center = Offset(cX, cY))
+        drawCircle(color = Color.White, radius = w * 0.3f, center = Offset(cX, cY))
+        drawRect(
+            color = Color(0xFF4285F4),
+            topLeft = Offset(cX, cY - h * 0.12f),
+            size = androidx.compose.ui.geometry.Size(w * 0.45f, h * 0.24f)
+        )
     }
 }
