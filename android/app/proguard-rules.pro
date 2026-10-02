@@ -7,7 +7,7 @@
 -keepclasseswithmembers class * {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keepclassmembers class * : kotlinx.serialization.KSerializer {
+-keepclassmembers class * implements kotlinx.serialization.KSerializer {
     *** Companion;
 }
 
