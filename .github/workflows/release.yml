@@ -98,9 +98,48 @@ jobs:
 
       - name: Assemble release APK
         run: |
+          set -o pipefail
           ./gradlew :app:assembleRelease \
             -PomiVersionName="${{ steps.version.outputs.name }}" \
-            -PomiVersionCode="${{ steps.version.outputs.code }}"
+            -PomiVersionCode="${{ steps.version.outputs.code }}" \
+            2>&1 | tee "$RUNNER_TEMP/gradle.log"
+
+      # A red build is only useful if the reason outlives it. The raw task log is
+      # not readable without a token, so the interesting lines are re-emitted
+      # twice: into the run summary for a human, and as annotations, which the
+      # check-run API serves over plain HTTPS. The second copy is what lets an
+      # automated fix read the error without anyone pasting it back.
+      - name: Explain the failure
+        if: failure()
+        run: |
+          log="$RUNNER_TEMP/gradle.log"
+          if [ ! -f "$log" ]; then
+            echo "::error::Gradle wrote no log at all."
+            exit 0
+          fi
+
+          interesting() {
+            grep -E '^(e|w): |error:|FAILURE:|BUILD FAILED|Execution failed for task|^> Task .*FAILED|^[[:space:]]+> ' "$log" \
+              | head -n 120
+          }
+
+          {
+            echo "### Why the build failed"
+            echo ""
+            echo '```'
+            interesting
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          interesting \
+            | grep -E '^(e: |.*error:|Execution failed for task|> Task .*FAILED)' \
+            | head -n 60 \
+            | while IFS= read -r line; do
+                # % would otherwise be read as the start of a workflow-command
+                # escape, and a bare newline cannot appear in an annotation.
+                line="${line//%/%25}"
+                printf '::error title=Gradle::%s\n' "$line"
+              done
 
       - name: Collect artifact
         id: collect
