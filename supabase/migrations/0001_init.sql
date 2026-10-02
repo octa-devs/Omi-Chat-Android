@@ -455,12 +455,12 @@ $$;
 drop policy if exists "participants read call" on public.calls;
 create policy "participants read call"
   on public.calls for select to authenticated
-  using (public.is_call_member(id));
+  using (initiated_by = auth.uid() or public.is_call_member(id));
 
 drop policy if exists "participants update call" on public.calls;
 create policy "participants update call"
   on public.calls for update to authenticated
-  using (public.is_call_member(id));
+  using (initiated_by = auth.uid() or public.is_call_member(id));
 
 drop policy if exists "caller creates call" on public.calls;
 create policy "caller creates call"
@@ -470,7 +470,12 @@ create policy "caller creates call"
 drop policy if exists "participants read membership" on public.call_members;
 create policy "participants read membership"
   on public.call_members for select to authenticated
-  using (public.is_call_member(call_id));
+  using (
+    user_id = auth.uid() or exists (
+      select 1 from public.calls c
+      where c.id = call_id and (c.initiated_by = auth.uid() or public.is_call_member(c.id))
+    )
+  );
 
 drop policy if exists "participants add membership" on public.call_members;
 create policy "participants add membership"
@@ -481,11 +486,23 @@ create policy "participants add membership"
   ));
 
 -- ── call_ring ──────────────────────────────────────────────────────────────
--- Your own ring rows only. Nobody else can ring you.
+-- Call participants can manage ring rows for calls they participate in or initiated
 drop policy if exists "own ring" on public.call_ring;
-create policy "own ring"
+drop policy if exists "call ring participants" on public.call_ring;
+create policy "call ring participants"
   on public.call_ring for all to authenticated
-  using (user_id = auth.uid()) with check (user_id = auth.uid());
+  using (
+    user_id = auth.uid() or exists (
+      select 1 from public.calls c
+      where c.id = call_id and (c.initiated_by = auth.uid() or public.is_call_member(c.id))
+    )
+  )
+  with check (
+    user_id = auth.uid() or exists (
+      select 1 from public.calls c
+      where c.id = call_id and (c.initiated_by = auth.uid() or public.is_call_member(c.id))
+    )
+  );
 
 -- ── call_logs ──────────────────────────────────────────────────────────────
 drop policy if exists "own call log" on public.call_logs;

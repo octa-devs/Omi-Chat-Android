@@ -65,6 +65,7 @@ const THEMES: Array<{
   { value: "ember", label: "Amber", bg: "linear-gradient(140deg,#ffe9c9,#f7f3ea)" },
   { value: "mint", label: "Mint", bg: "linear-gradient(140deg,#d8f7f0,#eef7f5)" },
   { value: "noir", label: "Slate", bg: "linear-gradient(140deg,#dde2ec,#eef1f7)" },
+  { value: "dark", label: "Midnight Dark", bg: "linear-gradient(140deg,#0a0e17,#161e31)" },
 ];
 
 export function SettingsView() {

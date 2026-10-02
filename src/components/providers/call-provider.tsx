@@ -73,7 +73,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
         kind: input.kind,
         chatId: input.chatId,
       });
-      router.push(`/call/${callId}`);
+      router.push(
+        `/call/${callId}?peerId=${encodeURIComponent(input.peerId)}&peerName=${encodeURIComponent(input.peerName)}&kind=${input.kind}`,
+      );
       return callId;
     },
     [uid, router],

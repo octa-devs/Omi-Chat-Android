@@ -185,7 +185,15 @@ export function Switch({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-3">
+    <div
+      onClick={() => {
+        if (!disabled) onChange(!checked);
+      }}
+      className={cn(
+        "flex cursor-pointer select-none items-start justify-between gap-4 py-3 transition-opacity",
+        disabled && "pointer-events-none opacity-40",
+      )}
+    >
       <div className="flex min-w-0 items-start gap-3">
         {icon && (
           <span
@@ -214,7 +222,10 @@ export function Switch({
         aria-checked={checked}
         aria-label={label}
         disabled={disabled}
-        onClick={() => onChange(!checked)}
+        onClick={(e) => {
+          e.stopPropagation();
+          onChange(!checked);
+        }}
         className={cn(
           "relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] disabled:opacity-40",
           checked

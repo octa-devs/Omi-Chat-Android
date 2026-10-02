@@ -55,6 +55,7 @@ const BACKDROPS: Record<UserSettings["theme"], string> = {
   ember: "#c07c1f",
   mint: "#16a394",
   noir: "#55637d",
+  dark: "#0a0e17",
 };
 
 function applyAccent(accent: UserSettings["accent"]) {

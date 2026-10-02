@@ -1,12 +1,12 @@
-"use client";
-
+// Bug #12 Fix: removed "use client" — the only thing needing the client was
+// router.back(). That's now in BackButton (a small client component), allowing
+// this page to be statically rendered as a Server Component.
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, Compass, Home, LifeBuoy, Sparkles } from "lucide-react";
 import { AuroraFixed } from "@/components/ui/aurora";
 import { Logo } from "@/components/ui/logo";
-import { Button, ButtonLink } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/back-button";
 import { SITE } from "@/lib/site";
 
 const SUGGESTIONS = [
@@ -16,8 +16,6 @@ const SUGGESTIONS = [
 ];
 
 export default function NotFound() {
-  const router = useRouter();
-
   return (
     <>
       <AuroraFixed intensity={0.75} />
@@ -30,29 +28,15 @@ export default function NotFound() {
 
           {/* big 404 with the mark sitting in the zero */}
           <div className="relative mt-14 select-none">
-            <motion.p
-              initial={{ opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-              className="font-display text-[clamp(6rem,26vw,15rem)] leading-[0.82] tracking-[-0.05em] text-gradient"
-            >
+            <p className="font-display text-[clamp(6rem,26vw,15rem)] leading-[0.82] tracking-[-0.05em] text-gradient">
               404
-            </motion.p>
-            <motion.span
-              initial={{ opacity: 0, y: 24, rotate: -18 }}
-              animate={{ opacity: 1, y: 0, rotate: -8 }}
-              transition={{ delay: 0.45, duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
-            >
+            </p>
+            <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
               <span className="block size-24 rounded-full bg-brand-200/70 blur-2xl sm:size-32" />
-            </motion.span>
+            </span>
           </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 22 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          >
+          <div>
             <h1 className="mt-10 font-display text-[clamp(1.9rem,5vw,2.9rem)] leading-tight text-fg text-balance">
               This message never arrived.
             </h1>
@@ -66,24 +50,11 @@ export default function NotFound() {
                 <Home className="size-4" />
                 Back to home
               </ButtonLink>
-              <Button
-                variant="glass"
-                size="lg"
-                className="w-full sm:w-auto"
-                onClick={() => router.back()}
-              >
-                <ArrowLeft className="size-4" />
-                Go back
-              </Button>
+              <BackButton />
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.55, duration: 0.8 }}
-            className="mt-14"
-          >
+          <div className="mt-14">
             <p className="text-[0.68rem] font-semibold tracking-[0.22em] text-fg-3 uppercase">
               Try one of these
             </p>
@@ -109,7 +80,7 @@ export default function NotFound() {
                 Write to {SITE.dev.name}
               </a>
             </p>
-          </motion.div>
+          </div>
         </div>
       </main>
     </>

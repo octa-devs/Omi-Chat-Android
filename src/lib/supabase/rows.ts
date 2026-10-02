@@ -127,6 +127,8 @@ export interface MessageRow {
   deleted: boolean | null;
   created_at: string;
   sender_name: string | null;
+  /** JSONB column: emoji → uid[]. Null means no reactions yet. */
+  reactions: Record<string, string[]> | null;
 }
 
 export function rowToMessage(r: MessageRow): OmiMessage {
@@ -144,5 +146,6 @@ export function rowToMessage(r: MessageRow): OmiMessage {
     replyTo: r.reply_to ?? null,
     editedAt: r.edited_at ? ts(r.edited_at) : null,
     deleted: r.deleted ?? false,
+    reactions: r.reactions ?? undefined,
   };
 }

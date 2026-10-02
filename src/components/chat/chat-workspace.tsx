@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { MessageSquareDashed, Plus, Users, Sparkles } from "lucide-react";
@@ -10,6 +10,7 @@ import { PageSkeleton } from "@/components/ui/skeleton";
 import { ChatSidebar } from "./chat-sidebar";
 import { Conversation } from "./conversation";
 import { NewChatDialog } from "./new-chat-dialog";
+import { PermissionsPromptModal } from "@/components/notifications/permissions-prompt-modal";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useInbox } from "@/hooks/use-chat-data";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,52 @@ export function ChatWorkspace({ chatId }: { chatId: string | null }) {
 
   const [selected, setSelected] = useState<string | null>(chatId);
   useEffect(() => setSelected(chatId), [chatId]);
+
+  // Dynamic document title: e.g. (1) Omi Chat like Instagram
+  useEffect(() => {
+    const totalUnread = chats.reduce((n, c) => n + (c.unread ?? 0), 0);
+    if (totalUnread > 0) {
+      document.title = `(${totalUnread}) Omi Chat`;
+    } else {
+      document.title = "Omi Chat";
+    }
+  }, [chats]);
+
+  // Desktop & mobile notifications for incoming messages
+  const prevUnreadRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (
+      typeof window === "undefined" ||
+      !("Notification" in window) ||
+      Notification.permission !== "granted"
+    ) {
+      return;
+    }
+
+    chats.forEach((chat) => {
+      const prev = prevUnreadRef.current[chat.id] ?? 0;
+      const cur = chat.unread ?? 0;
+      if (cur > prev && chat.lastMessage && chat.lastMessage.senderId !== uid) {
+        if (document.hidden || selected !== chat.id) {
+          try {
+            const notif = new Notification(chat.title || "Omi Chat", {
+              body: chat.lastMessage.text || "Sent an attachment",
+              icon: chat.avatarUrl || "/omi chat.png",
+              tag: chat.id,
+            });
+            notif.onclick = () => {
+              window.focus();
+              setSelected(chat.id);
+              router.push(`/chat/${chat.id}`);
+            };
+          } catch {
+            // notification error ignored
+          }
+        }
+      }
+      prevUnreadRef.current[chat.id] = cur;
+    });
+  }, [chats, uid, selected, router]);
 
   if (loading || (!uid && !profile)) {
     return <PageSkeleton label="Opening Omi Chat" />;
@@ -110,6 +157,7 @@ export function ChatWorkspace({ chatId }: { chatId: string | null }) {
       </div>
 
       <NewChatDialog open={newChatOpen} onClose={() => setNewChatOpen(false)} />
+      <PermissionsPromptModal />
     </>
   );
 }

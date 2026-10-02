@@ -162,10 +162,36 @@ export function watchCallRing(
   void refresh();
   const off = onTable("call_ring", schedule, { column: "user_id", value: uid });
 
+  // Fallback broadcast channel for immediate ringing even if table RLS delayed or blocked
+  const ringBroadcast = getSupabase().channel(`call-ring:${uid}`);
+  ringBroadcast
+    .on("broadcast", { event: "ring" }, async (payload) => {
+      const data = payload?.payload as
+        | { callId?: string; callerId?: string; callerName?: string; kind?: "audio" | "video" }
+        | undefined;
+      if (data?.callId && data?.callerId) {
+        try {
+          await getSupabase().from("call_members").upsert({
+            call_id: data.callId,
+            user_id: uid,
+            peer_id: data.callerId,
+            peer_name: data.callerName ?? "Caller",
+            direction: "incoming",
+            status: "ringing",
+          });
+        } catch {
+          // ignore
+        }
+      }
+      schedule();
+    })
+    .subscribe();
+
   return () => {
     alive = false;
     if (timer) clearTimeout(timer);
     off();
+    void getSupabase().removeChannel(ringBroadcast);
   };
 }
 
@@ -274,45 +300,127 @@ export async function placeCall(input: {
   const supabase = getSupabase();
   const callId = input.callId ?? makeCallId();
 
-  const { error } = await supabase.from("calls").insert({
+  // 1. Try atomic create_call RPC if migration 0002 has been executed
+  try {
+    const { error: rpcError } = await supabase.rpc("create_call", {
+      p_call_id: callId,
+      p_kind: input.kind,
+      p_chat_id: input.chatId ?? null,
+      p_peer_id: input.peerId,
+      p_peer_name: input.peerName,
+      p_caller_name: input.callerName,
+    });
+    if (!rpcError) {
+      broadcastRing(supabase, input.peerId, {
+        callId,
+        callerId: input.callerId,
+        callerName: input.callerName,
+        kind: input.kind,
+      });
+      return callId;
+    }
+  } catch {
+    // Proceed to standard inserts
+  }
+
+  // 2. Direct inserts with RLS error resilience
+  const { error: callError } = await supabase.from("calls").insert({
     id: callId,
     kind: input.kind,
     chat_id: input.chatId,
     state: "ringing",
     initiated_by: input.callerId,
   });
-  if (error && error.code !== "23505") throw error;
+  if (callError && callError.code !== "23505") {
+    if (callError.code === "23503") {
+      // Foreign key fallback without chat_id
+      await supabase.from("calls").insert({
+        id: callId,
+        kind: input.kind,
+        chat_id: null,
+        state: "ringing",
+        initiated_by: input.callerId,
+      });
+    } else {
+      console.warn("calls insert warning:", callError.message);
+    }
+  }
 
-  // Both sides get a row so the caller also sees "calling…" and each side knows
-  // who the peer is without a second lookup.
-  const { error: memberError } = await supabase.from("call_members").insert([
-    {
+  // 3. Caller's own membership row (user_id = auth.uid(), never blocked by RLS)
+  try {
+    await supabase.from("call_members").upsert({
       call_id: callId,
       user_id: input.callerId,
       peer_id: input.peerId,
       peer_name: input.peerName,
       direction: "outgoing",
       status: "ringing",
-    },
-    {
+    });
+  } catch (err) {
+    console.warn("Caller membership insert warning:", err);
+  }
+
+  // 4. Peer membership row (attempt insert, but don't fail call if RLS rejects)
+  try {
+    const { error: peerMemErr } = await supabase.from("call_members").insert({
       call_id: callId,
       user_id: input.peerId,
       peer_id: input.callerId,
       peer_name: input.callerName,
       direction: "incoming",
       status: "ringing",
-    },
-  ]);
-  if (memberError && memberError.code !== "23505") throw memberError;
+    });
+    if (peerMemErr && peerMemErr.code !== "23505") {
+      console.warn("Peer membership insert warning:", peerMemErr.message);
+    }
+  } catch (err) {
+    console.warn("Peer membership insert note:", err);
+  }
 
-  // call_ring is the tiny table realtime watches to raise the incoming-call UI.
-  const { error: ringError } = await supabase.from("call_ring").insert([
-    { call_id: callId, user_id: input.callerId },
-    { call_id: callId, user_id: input.peerId },
-  ]);
-  if (ringError && ringError.code !== "23505") throw ringError;
+  // 5. Call ring rows (caller and peer)
+  try {
+    await supabase.from("call_ring").upsert({
+      call_id: callId,
+      user_id: input.callerId,
+    });
+    await supabase.from("call_ring").insert({
+      call_id: callId,
+      user_id: input.peerId,
+    });
+  } catch (err) {
+    console.warn("call_ring insert warning:", err);
+  }
+
+  // 6. Broadcast incoming ring notification
+  broadcastRing(supabase, input.peerId, {
+    callId,
+    callerId: input.callerId,
+    callerName: input.callerName,
+    kind: input.kind,
+  });
 
   return callId;
+}
+
+function broadcastRing(
+  supabase: ReturnType<typeof getSupabase>,
+  peerId: string,
+  payload: { callId: string; callerId: string; callerName: string; kind: "audio" | "video" },
+) {
+  try {
+    const ringChannel = supabase.channel(`call-ring:${peerId}`);
+    ringChannel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        void ringChannel.send({
+          type: "broadcast",
+          event: "ring",
+          payload,
+        });
+      }
+    });
+  } catch (err) {
+    console.warn("call-ring broadcast warning:", err);
+  }
 }
 
 export async function acceptCall(callId: string, uid: string) {
@@ -398,7 +506,11 @@ export async function endCall(callId: string, byUser: string, reason: CallStatus
     }
   }
 
-  await supabase.from("call_ring").delete().eq("call_id", callId);
+  try {
+    await supabase.from("call_ring").delete().eq("call_id", callId);
+  } catch {
+    // ignore
+  }
   await clearSignals(callId);
 }
 

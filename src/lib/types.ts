@@ -5,7 +5,7 @@
 export type PresenceState = "online" | "away" | "busy" | "offline";
 
 export interface UserSettings {
-  theme: "aurora" | "ember" | "mint" | "noir";
+  theme: "aurora" | "ember" | "mint" | "noir" | "dark";
   accent: "azure" | "slate" | "teal" | "gold";
   enterToSend: boolean;
   readReceipts: boolean;
@@ -33,9 +33,14 @@ export interface OmiUser {
   blocked?: Record<string, boolean>;
   pinnedChats?: Record<string, true>;
   mutedChats?: Record<string, true>;
+  /** chatId -> messageId[] of starred messages */
+  starredMessages?: Record<string, string[]>;
 }
 
-export type MessageKind = "text" | "image" | "file" | "system" | "call";
+export type MessageKind = "text" | "image" | "file" | "audio" | "system" | "call";
+
+/** emoji -> uid[] */
+export type MessageReactions = Record<string, string[]>;
 
 export interface OmiMessage {
   id: string;
@@ -45,15 +50,25 @@ export interface OmiMessage {
   text: string;
   kind: MessageKind;
   createdAt: number;
-  /** URL for image/file attachments (Supabase Storage). */
+  /** URL for image/file/audio attachments (Supabase Storage). */
   attachmentUrl?: string | null;
   attachmentName?: string | null;
   attachmentSize?: number | null;
+  /** Duration in seconds for audio messages */
+  audioDuration?: number | null;
   replyTo?: { id: string; text: string; senderName: string } | null;
   editedAt?: number | null;
   deleted?: boolean;
   /** ephemeral, never persisted */
   status?: "sending" | "sent" | "failed";
+  /** Emoji reactions: emoji → array of UIDs who reacted */
+  reactions?: MessageReactions;
+  /** Whether this message was forwarded */
+  forwarded?: boolean;
+  /** Client-only: starred by current user */
+  starred?: boolean;
+  /** Seconds after reading before the message disappears (0 = never) */
+  disappearAfter?: number | null;
 }
 
 export type ChatKind = "direct" | "group";
@@ -85,6 +100,8 @@ export interface OmiChat {
   readCursors?: Record<string, number>;
   /** Messages from other members newer than my own read cursor. */
   unread?: number;
+  /** Optional background: CSS color, gradient, or storage URL */
+  wallpaper?: string | null;
 }
 
 export type CallStatus =
@@ -115,6 +132,8 @@ export interface CallRecord {
 }
 
 export interface SignalMessage {
+  /** Unique id used to de-duplicate re-delivered signals */
+  id: string;
   from: string;
   kind: "offer" | "answer" | "candidate" | "hangup" | "media" | "ping";
   payload?: unknown;
@@ -127,7 +146,7 @@ export type UnsubscribeFn = () => void;
 export const DEFAULT_SETTINGS: UserSettings = {
   theme: "aurora",
   accent: "azure",
-  enterToSend: false,
+  enterToSend: true,
   readReceipts: true,
   typingIndicator: true,
   messageSounds: true,
@@ -149,4 +168,18 @@ export interface CallLogEntry {
   status: CallStatus;
   startedAt: number;
   durationSec: number;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Starred message reference (cross-chat)
+   ═══════════════════════════════════════════════════════════════ */
+
+export interface StarredMessageRef {
+  messageId: string;
+  chatId: string;
+  chatTitle: string;
+  text: string;
+  senderName: string;
+  kind: MessageKind;
+  createdAt: number;
 }

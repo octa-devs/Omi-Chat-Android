@@ -27,6 +27,8 @@ interface AuthContextValue {
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   setStatusText: (text: string) => Promise<void>;
+  setChatPinned: (chatId: string, pinned: boolean) => void;
+  setChatMuted: (chatId: string, muted: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -119,15 +121,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Realtime presence: presenceSync fires on every join/leave across clients,
     // which is how a peer notices you closed the tab without a DB round trip.
-    const channel = getSupabase().channel(`presence:${uid}`, {
+    let channel = getSupabase().channel(`presence:${uid}`, {
       config: { presence: { key: uid } },
     });
     channel.on("presence", { event: "sync" }, () => undefined);
-    void channel.track({ uid, at: Date.now() });
-    void channel.subscribe();
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED" && !disposed) {
+        void channel.track({ uid, at: Date.now() });
+      }
+    });
+
+    // Bug #7 Fix: Re-subscribe the Realtime channel after network recovery.
+    // Previously, `window.addEventListener("online", goAway)` would call goAway
+    // (which might set away) and the stale Realtime channel would never
+    // re-subscribe. Now we explicitly set online AND re-subscribe.
+    const onNetworkOnline = () => {
+      if (disposed) return;
+      goOnline();
+      // Re-subscribe the Realtime presence channel after reconnect.
+      void getSupabase().removeChannel(channel).then(() => {
+        if (disposed) return;
+        channel = getSupabase().channel(`presence:${uid}`, {
+          config: { presence: { key: uid } },
+        });
+        channel.on("presence", { event: "sync" }, () => undefined);
+        channel.subscribe((status) => {
+          if (status === "SUBSCRIBED" && !disposed) {
+            void channel.track({ uid, at: Date.now() });
+          }
+        });
+      });
+    };
 
     document.addEventListener("visibilitychange", goAway);
-    window.addEventListener("online", goAway);
+    window.addEventListener("online", onNetworkOnline);
     window.addEventListener("beforeunload", onUnload);
     const heartbeat = setInterval(goAway, 60_000);
 
@@ -135,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       disposed = true;
       clearInterval(heartbeat);
       document.removeEventListener("visibilitychange", goAway);
-      window.removeEventListener("online", goAway);
+      window.removeEventListener("online", onNetworkOnline);
       window.removeEventListener("beforeunload", onUnload);
       void setPresence(uid, "offline").catch(() => undefined);
       void getSupabase().removeChannel(channel);
@@ -166,6 +193,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [uid],
   );
 
+  const setChatPinned = useCallback((chatId: string, isPinned: boolean) => {
+    setProfile((p) => {
+      if (!p) return p;
+      const nextPins = { ...(p.pinnedChats ?? {}) };
+      if (isPinned) nextPins[chatId] = true;
+      else delete nextPins[chatId];
+      return { ...p, pinnedChats: nextPins };
+    });
+  }, []);
+
+  const setChatMuted = useCallback((chatId: string, isMuted: boolean) => {
+    setProfile((p) => {
+      if (!p) return p;
+      const nextMutes = { ...(p.mutedChats ?? {}) };
+      if (isMuted) nextMutes[chatId] = true;
+      else delete nextMutes[chatId];
+      return { ...p, mutedChats: nextMutes };
+    });
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       loading,
@@ -178,8 +225,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshProfile,
       signOut,
       setStatusText,
+      setChatPinned,
+      setChatMuted,
     }),
-    [loading, uid, email, profile, error, refreshProfile, signOut, setStatusText],
+    [
+      loading,
+      uid,
+      email,
+      profile,
+      error,
+      refreshProfile,
+      signOut,
+      setStatusText,
+      setChatPinned,
+      setChatMuted,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

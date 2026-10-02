@@ -191,16 +191,18 @@ export function filterChats(
 /** A one-line preview of the latest message, adapted per kind. */
 export function previewOf(chat: OmiChat, meId: string | null): string {
   const lm = chat.lastMessage;
-  if (!lm) return "No messages yet — say hello 👋";
+  if (!lm) return "No messages yet — say hello";
   const mine = lm.senderId === meId;
   const who = mine ? "You: " : chat.kind === "group" ? `${lm.senderName}: ` : "";
   switch (lm.kind) {
     case "image":
-      return `${who}📷 Photo`;
+      return `${who}Photo`;
     case "file":
-      return `${who}📎 Attachment`;
+      return `${who}Attachment`;
+    case "audio":
+      return `${who}Voice message`;
     case "call":
-      return `${who}📞 Call`;
+      return `${who}Call`;
     case "system":
       return lm.text;
     default:
@@ -219,16 +221,30 @@ export function useDebouncedValue<T>(value: T, delay: number) {
   return debounced;
 }
 
-export function useIsMobile(breakpoint = 1024) {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const update = () => setIsMobile(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, [breakpoint]);
-  return isMobile;
+// Bug #1 Fix: SSR hydration mismatch — useState(false) always starts false,
+// causing a layout flash on mobile. useSyncExternalStore correctly returns
+// the server snapshot (false) for SSR and immediately reads the real value
+// client-side without a second render cycle mismatch.
+import { useSyncExternalStore } from "react";
+
+function subscribe(cb: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  const mq = window.matchMedia("(max-width: 1023px)");
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
+function getSnapshot() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 1023px)").matches;
+}
+
+function getServerSnapshot() {
+  return false;
+}
+
+export function useIsMobile() {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
 export function useNow(intervalMs = 60_000) {
@@ -238,4 +254,68 @@ export function useNow(intervalMs = 60_000) {
     return () => clearInterval(t);
   }, [intervalMs]);
   return now;
+}
+
+/* ── draft persistence ────────────────────────────────────── */
+
+/** Feature: Draft Persistence — save and restore composer text per chat. */
+const DRAFT_KEY = (chatId: string) => `omi:draft:${chatId}`;
+
+export function getDraft(chatId: string): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(DRAFT_KEY(chatId)) ?? "";
+}
+
+export function saveDraft(chatId: string, text: string) {
+  if (typeof window === "undefined") return;
+  if (text.trim()) {
+    localStorage.setItem(DRAFT_KEY(chatId), text);
+  } else {
+    localStorage.removeItem(DRAFT_KEY(chatId));
+  }
+}
+
+export function clearDraft(chatId: string) {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(DRAFT_KEY(chatId));
+}
+
+/* ── starred messages ─────────────────────────────────────── */
+
+const STARRED_KEY = "omi:starred";
+
+export interface StarredEntry {
+  messageId: string;
+  chatId: string;
+  chatTitle: string;
+  text: string;
+  senderName: string;
+  kind: OmiMessage["kind"];
+  createdAt: number;
+}
+
+export function getStarred(): StarredEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(STARRED_KEY) ?? "[]") as StarredEntry[];
+  } catch {
+    return [];
+  }
+}
+
+export function toggleStar(entry: StarredEntry): boolean {
+  const all = getStarred();
+  const idx = all.findIndex((s) => s.messageId === entry.messageId);
+  if (idx >= 0) {
+    all.splice(idx, 1);
+    localStorage.setItem(STARRED_KEY, JSON.stringify(all));
+    return false; // now unstarred
+  }
+  all.push(entry);
+  localStorage.setItem(STARRED_KEY, JSON.stringify(all));
+  return true; // now starred
+}
+
+export function isStarred(messageId: string): boolean {
+  return getStarred().some((s) => s.messageId === messageId);
 }

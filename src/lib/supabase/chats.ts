@@ -528,3 +528,113 @@ export async function uploadAttachment(
 
   return { url: urlData.signedUrl, name: file.name, size: file.size };
 }
+
+/* ── reactions ────────────────────────────────────────────── */
+
+/**
+ * Toggle a reaction emoji on a message.
+ * Reactions are stored as JSONB on the message row: { emoji: [uid, ...] }
+ */
+export async function reactToMessage(
+  chatId: string,
+  messageId: string,
+  uid: string,
+  emoji: string,
+): Promise<void> {
+  const { data, error: fetchErr } = await getSupabase()
+    .from("messages")
+    .select("reactions")
+    .eq("id", messageId)
+    .eq("chat_id", chatId)
+    .single();
+  if (fetchErr) throw fetchErr;
+
+  const current = (data as { reactions: Record<string, string[]> | null }).reactions ?? {};
+  const arr = current[emoji] ?? [];
+  const idx = arr.indexOf(uid);
+  let next: Record<string, string[]>;
+  if (idx >= 0) {
+    const newArr = arr.filter((u) => u !== uid);
+    if (newArr.length === 0) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [emoji]: _, ...rest } = current;
+      next = rest;
+    } else {
+      next = { ...current, [emoji]: newArr };
+    }
+  } else {
+    next = { ...current, [emoji]: [...arr, uid] };
+  }
+
+  const { error } = await getSupabase()
+    .from("messages")
+    .update({ reactions: next })
+    .eq("id", messageId)
+    .eq("chat_id", chatId);
+  if (error) throw error;
+}
+
+/* ── audio messages ───────────────────────────────────────── */
+
+/**
+ * Upload a voice recording and send it as an audio message.
+ */
+export async function sendAudioMessage(input: {
+  chat: OmiChat;
+  senderId: string;
+  senderName: string;
+  audioBlob: Blob;
+  durationSec: number;
+  onProgress?: (pct: number) => void;
+}): Promise<OmiMessage> {
+  const supabase = getSupabase();
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+
+  const fileName = `voice_${Date.now()}.webm`;
+  const file = new File([input.audioBlob], fileName, { type: "audio/webm" });
+  const path = `${input.senderId}/${input.chat.id}/${fileName}`;
+
+  const { data: signed, error: signError } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUploadUrl(path);
+  if (signError) throw signError;
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", signed.signedUrl, true);
+    xhr.setRequestHeader("authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("x-upsert", "false");
+    xhr.setRequestHeader("content-type", "audio/webm");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && input.onProgress) {
+        input.onProgress((e.loaded / e.total) * 100);
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed (${xhr.status}).`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed - network error."));
+    xhr.send(file);
+  });
+
+  const { data: urlData, error: urlError } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(path, 60 * 60 * 24 * 365);
+  if (urlError) throw urlError;
+
+  const durationSec = input.durationSec;
+  return sendMessage({
+    chat: input.chat,
+    senderId: input.senderId,
+    senderName: input.senderName,
+    text: `Voice message (${Math.ceil(durationSec)}s)`,
+    kind: "audio",
+    attachmentUrl: urlData.signedUrl,
+    attachmentName: fileName,
+    attachmentSize: input.audioBlob.size,
+  });
+}
+

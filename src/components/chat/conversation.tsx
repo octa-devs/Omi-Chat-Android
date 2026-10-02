@@ -14,6 +14,9 @@ import {
   ChevronDown,
   Pin,
   BellOff,
+  Star,
+  Forward,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarStack } from "@/components/ui/avatar";
@@ -23,6 +26,8 @@ import { SkeletonBubble, PageSkeleton } from "@/components/ui/skeleton";
 import { MessageBubble } from "./message-bubble";
 import { Composer } from "./composer";
 import { ChatInfoPanel } from "./chat-info-panel";
+import { ForwardDialog } from "./forward-dialog";
+import { StarredPanel } from "./starred-panel";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useCalls } from "@/components/providers/call-provider";
 import { useSettings } from "@/components/providers/settings-provider";
@@ -38,6 +43,8 @@ import {
   deleteMessage,
   editMessage,
   markMessageRead,
+  reactToMessage,
+  sendAudioMessage,
   sendMessage,
   setTyping,
   uploadAttachment,
@@ -63,7 +70,7 @@ export function Conversation({
   chatId: string;
   onBack: () => void;
 }) {
-  const { uid, profile } = useAuth();
+  const { uid, profile, setChatPinned, setChatMuted } = useAuth();
   const { settings } = useSettings();
   const { startCall } = useCalls();
   const isMobile = useIsMobile();
@@ -79,6 +86,12 @@ export function Conversation({
   const [searchOpen, setSearchOpen] = useState(false);
   const [term, setTerm] = useState("");
   const [atBottom, setAtBottom] = useState(true);
+  const [newCount, setNewCount] = useState(0); // Feature: unread count on jump button
+
+  // Feature: Forward dialog state
+  const [forwardMsg, setForwardMsg] = useState<OmiMessage | null>(null);
+  // Feature: Starred panel state
+  const [starredOpen, setStarredOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -113,19 +126,26 @@ export function Conversation({
     if (messagesLoading || !lastMessage || !uid) return;
     if (lastMessage.senderId === uid) return;
     if (messages.length === lastCountRef.current) return;
+    const incoming = messages.length - lastCountRef.current;
     if (lastCountRef.current !== 0 && settings.messageSounds) {
       playMessageChime(true);
     }
+    // Feature: track new message count when scrolled up
+    if (lastCountRef.current !== 0 && !atBottom) {
+      setNewCount((c) => c + incoming);
+    }
     lastCountRef.current = messages.length;
-  }, [messages, messagesLoading, lastMessage, uid, settings.messageSounds]);
+  }, [messages, messagesLoading, lastMessage, uid, settings.messageSounds, atBottom]);
 
   /* ── autoscroll ── */
+  // Bug #11 Fix: added `uid` to the dependency array so autoscroll doesn't
+  // use a stale uid when determining if the last message is "mine".
   useEffect(() => {
     if (messagesLoading) return;
     if (atBottom || lastMessage?.senderId === uid) {
       bottomRef.current?.scrollIntoView({ behavior: lastCountRef.current ? "smooth" : "auto" });
     }
-  }, [messages, messagesLoading, atBottom, lastMessage]);
+  }, [messages, messagesLoading, atBottom, lastMessage, uid]);
 
   /**
    * Scroll fires far faster than React can usefully re-render, and the two
@@ -147,6 +167,7 @@ export function Conversation({
     if (near !== atBottomRef.current) {
       atBottomRef.current = near;
       setAtBottom(near);
+      if (near) setNewCount(0); // reset unread count when reaching bottom
     }
     if (!near) return;
 
@@ -198,6 +219,22 @@ export function Conversation({
     [chat, uid, profile],
   );
 
+  // Feature: Voice message handler
+  const handleVoice = useCallback(
+    async (blob: Blob, durationSec: number) => {
+      if (!chat || !uid || !profile) return;
+      await sendAudioMessage({
+        chat,
+        senderId: uid,
+        senderName: profile.displayName,
+        audioBlob: blob,
+        durationSec,
+      });
+      setAtBottom(true);
+    },
+    [chat, uid, profile],
+  );
+
   const handleTyping = useCallback(
     (typing: boolean) => {
       if (!chat || !uid || !settings.typingIndicator) return;
@@ -222,6 +259,24 @@ export function Conversation({
     },
     [chatId],
   );
+
+  // Feature: Reaction handler
+  const handleReact = useCallback(
+    async (m: OmiMessage, emoji: string) => {
+      if (!uid) return;
+      try {
+        await reactToMessage(chatId, m.id, uid, emoji);
+      } catch (e) {
+        toast.error(errorMessage(e));
+      }
+    },
+    [chatId, uid],
+  );
+
+  // Feature: Forward handler
+  const handleForward = useCallback((m: OmiMessage) => {
+    setForwardMsg(m);
+  }, []);
 
   const call = async (kind: "audio" | "video") => {
     if (chat?.kind === "group") {
@@ -255,10 +310,6 @@ export function Conversation({
   const typingVisible = typingNames.filter((n) => n !== profile?.displayName);
 
   /* ── lookups hoisted out of the render loop ── */
-  // Both of these used to run once per message per render: a `.find` across
-  // members, and Object.entries() over the read cursors. In a long
-  // conversation that is thousands of comparisons and allocations every time
-  // anything at all re-renders.
   const memberByUid = useMemo(() => {
     const map = new Map<string, OmiUser>();
     for (const m of members) map.set(m.uid, m);
@@ -320,6 +371,10 @@ export function Conversation({
   }
 
   const presence = chat.kind === "direct" ? (peer?.presence ?? "offline") : undefined;
+
+  // Bug #4 Fix: `members` excludes the current user, and +1 re-adds them.
+  // Guard against showing "1 members" when the list hasn't loaded yet.
+  const memberCount = members.length > 0 ? members.length + 1 : Object.keys(chat.members).length;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -389,8 +444,9 @@ export function Conversation({
                           : "text-fg-3",
                     )}
                   >
+                    {/* Bug #4 Fix: use memberCount for accurate count */}
                     {chat.kind === "group"
-                      ? `${members.length + 1} members`
+                      ? `${memberCount} ${memberCount === 1 ? "member" : "members"}`
                       : presence === "online"
                         ? "online now"
                         : formatLastSeen(peer?.lastSeen)}
@@ -402,6 +458,17 @@ export function Conversation({
         </button>
 
         <div className="flex shrink-0 items-center gap-1">
+          {/* Feature: Starred messages button */}
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Starred messages"
+            title="Starred messages"
+            onClick={() => setStarredOpen(true)}
+            className="hidden sm:inline-flex"
+          >
+            <Star className="size-4.5" />
+          </Button>
           <Button
             size="icon-sm"
             variant="ghost"
@@ -487,6 +554,7 @@ export function Conversation({
         ref={scrollRef}
         onScroll={onScroll}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4"
+        style={chat.wallpaper ? { background: chat.wallpaper } : undefined}
       >
         {messagesLoading ? (
           <div className="space-y-4 px-1">
@@ -505,7 +573,7 @@ export function Conversation({
               </p>
               <p className="mt-2 text-sm text-fg-3">
                 {term
-                  ? `Nothing here matches “${term}”.`
+                  ? `Nothing here matches "${term}".`
                   : `Say hello to ${chat.kind === "group" ? chat.title : (peer?.displayName ?? chat.title)}.`}
               </p>
             </div>
@@ -538,9 +606,12 @@ export function Conversation({
                       peerName={sender?.displayName ?? m.senderName}
                       peerAvatar={sender?.avatarUrl}
                       read={readByPeer(m)}
+                      myUid={uid ?? ""}
                       onReply={setReplyTo}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
+                      onReact={handleReact}
+                      onForward={handleForward}
                     />
                   );
                 })}
@@ -551,7 +622,7 @@ export function Conversation({
         )}
       </div>
 
-      {/* ── jump to latest ── */}
+      {/* Feature: jump to latest with unread count */}
       <AnimatePresence>
         {!atBottom && shown.length > 0 && (
           <motion.button
@@ -561,11 +632,19 @@ export function Conversation({
             onClick={() => {
               bottomRef.current?.scrollIntoView({ behavior: "smooth" });
               setAtBottom(true);
+              setNewCount(0);
             }}
             aria-label="Jump to latest message"
-            className="glass-strong absolute bottom-32 left-1/2 z-20 grid size-10 -translate-x-1/2 place-items-center rounded-full text-fg-2 shadow-xl transition-colors hover:text-fg"
+            className="glass-strong absolute bottom-32 left-1/2 z-20 -translate-x-1/2 rounded-full text-fg-2 shadow-xl transition-colors hover:text-fg"
           >
-            <ChevronDown className="size-5" />
+            <span className="flex items-center gap-1.5 px-4 py-2.5">
+              <ChevronDown className="size-4" />
+              {newCount > 0 && (
+                <span className="rounded-full bg-brand-500 px-1.5 py-0.5 text-[0.6rem] font-semibold text-white">
+                  {newCount > 99 ? "99+" : newCount} new
+                </span>
+              )}
+            </span>
           </motion.button>
         )}
       </AnimatePresence>
@@ -573,8 +652,10 @@ export function Conversation({
       {/* ── composer ── */}
       <div className="shrink-0">
         <Composer
+          chatId={chatId}
           onSend={handleSend}
           onAttach={handleAttach}
+          onVoice={handleVoice}
           onTyping={handleTyping}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
@@ -593,20 +674,44 @@ export function Conversation({
           setInfoOpen(false);
           void call(kind);
         }}
-        onTogglePin={async () => {
+        onTogglePin={async (next) => {
           if (!uid) return;
-          const next = !profile?.pinnedChats?.[chat.id];
-          await setPinned(uid, chat.id, next);
-          toast.success(next ? "Pinned to the top" : "Unpinned");
+          setChatPinned(chat.id, next);
+          try {
+            await setPinned(uid, chat.id, next);
+            toast.success(next ? "Pinned to the top" : "Unpinned");
+          } catch {
+            setChatPinned(chat.id, !next);
+            toast.error("Couldn't update pin status");
+          }
         }}
-        onToggleMute={async () => {
+        onToggleMute={async (next) => {
           if (!uid) return;
-          const next = !profile?.mutedChats?.[chat.id];
-          await setMuted(uid, chat.id, next);
-          toast.success(next ? "Notifications muted" : "Notifications on");
+          setChatMuted(chat.id, next);
+          try {
+            await setMuted(uid, chat.id, next);
+            toast.success(next ? "Notifications muted" : "Notifications on");
+          } catch {
+            setChatMuted(chat.id, !next);
+            toast.error("Couldn't update notification status");
+          }
         }}
         pinned={Boolean(profile?.pinnedChats?.[chat.id])}
         muted={Boolean(profile?.mutedChats?.[chat.id])}
+      />
+
+      {/* Feature: Forward dialog */}
+      {forwardMsg && (
+        <ForwardDialog
+          message={forwardMsg}
+          onClose={() => setForwardMsg(null)}
+        />
+      )}
+
+      {/* Feature: Starred messages panel */}
+      <StarredPanel
+        open={starredOpen}
+        onClose={() => setStarredOpen(false)}
       />
     </div>
   );

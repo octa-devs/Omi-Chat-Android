@@ -170,8 +170,10 @@ export function useWebRTC(opts: CallOptions) {
     let disposed = false;
 
     const pc = buildPc();
-    // `watchSignals` replays the whole node on every write, so de-dupe by id —
-    // otherwise the offer/answer would be re-applied and tear the PC down.
+    // Bug #3 Fix: `watchSignals` replays the whole node on every write, so
+    // de-dupe by id — msg.id was previously undefined because SignalMessage
+    // had no id field. Now that it does, de-duplication works correctly and
+    // the offer/answer won't be re-applied, which was tearing the PC down.
     const handled = new Set<string>();
 
     const flush = async () => {
@@ -202,8 +204,9 @@ export function useWebRTC(opts: CallOptions) {
 
     const unwatch = watchSignals(callId, selfUid, async (msg) => {
       if (disposed || msg.from === selfUid) return;
-      if (handled.has(msg.id)) return;
-      handled.add(msg.id);
+      // Bug #3 Fix: msg.id is now defined; de-duplication works.
+      if (msg.id && handled.has(msg.id)) return;
+      if (msg.id) handled.add(msg.id);
       try {
         if (msg.kind === "offer" && msg.payload) {
           await pc.setRemoteDescription(
@@ -283,6 +286,12 @@ export function useWebRTC(opts: CallOptions) {
     broadcast(next ? "cam-on" : "cam-off");
   }, [camOn, broadcast]);
 
+  // Bug #2 Fix: `toggleScreen` previously captured `screenOn` in a closure
+  // stored on `screenTrack.onended`. When the user stops sharing via the OS
+  // picker, the stale value caused the callback to run the wrong branch.
+  // Fix: use a stable ref so `onended` always calls the current function.
+  const toggleScreenRef = useRef<() => Promise<void>>(async () => undefined);
+
   const toggleScreen = useCallback(async () => {
     const pc = pcRef.current;
     if (!pc || !callId || !selfUid || !peerUid) return;
@@ -311,12 +320,16 @@ export function useWebRTC(opts: CallOptions) {
       } else {
         pc.addTrack(screenTrack, display);
       }
-      screenTrack.onended = () => void toggleScreen();
+      // Bug #2 Fix: use the stable ref instead of the captured closure.
+      screenTrack.onended = () => void toggleScreenRef.current();
       setScreenOn(true);
     } catch {
       /* user cancelled the picker */
     }
   }, [screenOn, callId, selfUid, peerUid]);
+
+  // Keep the ref up to date whenever the callback identity changes.
+  toggleScreenRef.current = toggleScreen;
 
   const hangup = useCallback(async () => {
     if (callId && selfUid && peerUid) {

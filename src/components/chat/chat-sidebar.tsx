@@ -16,13 +16,14 @@ import {
   CheckCheck,
   Info,
   SearchX,
+  PenLine,
 } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { SkeletonChatRow } from "@/components/ui/skeleton";
-import { filterChats, previewOf, useNow } from "@/hooks/use-chat-data";
+import { filterChats, previewOf, useNow, getDraft } from "@/hooks/use-chat-data";
 import { useAuth } from "@/components/providers/auth-provider";
 import { cn, formatTime, isSameDay } from "@/lib/utils";
 import type { OmiChat } from "@/lib/types";
@@ -133,7 +134,7 @@ export function ChatSidebar({
             {filter === f.key && (
               <motion.span
                 layoutId="sidebar-filter"
-                className="absolute inset-0 -z-10 rounded-full bg-white shadow-[0_1px_3px_rgba(19,23,37,0.1)] ring-1 ring-fg/8"
+                className="absolute inset-0 -z-10 rounded-full bg-surface shadow-[0_1px_3px_rgba(19,23,37,0.1)] ring-1 ring-fg/8"
                 transition={{ type: "spring", stiffness: 480, damping: 38 }}
               />
             )}
@@ -264,7 +265,7 @@ function ChatRow({
         href={`/chat/${chat.id}`}
         className={cn(
           "group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors duration-300",
-          active ? "bg-white shadow-[0_1px_3px_rgba(19,23,37,0.08)]" : "hover:bg-fg/[0.04]",
+          active ? "bg-surface shadow-[0_1px_3px_rgba(19,23,37,0.08)]" : "hover:bg-fg/[0.04]",
         )}
       >
         {active && (
@@ -301,6 +302,7 @@ function ChatRow({
             <span className="shrink-0 text-[0.65rem] text-fg-3">{stamp}</span>
           </div>
 
+          {/* meta preview */}
           <div className="mt-0.5 flex items-center gap-1.5">
             {mine && !unread && (
               <CheckCheck className="size-3.5 shrink-0 text-brand-600" />
@@ -311,7 +313,16 @@ function ChatRow({
                 unread ? "text-fg" : "text-fg-3",
               )}
             >
-              {previewOf(chat, meId)}
+              {/* Feature: Draft indicator */}
+              {!active && !unread && getDraft(chat.id) ? (
+                <span className="flex items-center gap-1">
+                  <PenLine className="size-3 shrink-0 text-rust-500" />
+                  <span className="text-rust-500 font-medium">Draft: </span>
+                  <span className="truncate">{getDraft(chat.id)}</span>
+                </span>
+              ) : (
+                previewOf(chat, meId)
+              )}
             </p>
             {unread > 0 && (
               <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[linear-gradient(120deg,var(--color-brand-500),var(--color-brand-700))] px-1.5 text-[0.65rem] font-semibold text-on-accent shadow-[0_4px_12px_-4px_rgba(42,103,204,0.7)]">
@@ -321,9 +332,13 @@ function ChatRow({
           </div>
         </div>
 
-        <span className="absolute top-1/2 right-2 -translate-y-1/2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-          <Info className="size-3.5 text-muted" />
-        </span>
+        {/* Bug #9 Fix: only show the info hover icon when there is no unread badge.
+             Previously both rendered at right-2 causing the icon to overlap the badge. */}
+        {unread === 0 && (
+          <span className="absolute top-1/2 right-2 -translate-y-1/2 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+            <Info className="size-3.5 text-muted" />
+          </span>
+        )}
       </Link>
     </motion.li>
   );

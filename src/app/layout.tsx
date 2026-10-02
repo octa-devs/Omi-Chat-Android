@@ -64,9 +64,12 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+// Bug #10 Fix: colorScheme was "dark" but CSS uses light tokens.
+// Aligning both to "light" so browser native UI (scrollbars, form inputs)
+// render correctly alongside the light design.
 export const viewport: Viewport = {
-  themeColor: "#05050a",
-  colorScheme: "dark",
+  themeColor: "#f4f6fb",
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

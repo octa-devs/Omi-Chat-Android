@@ -1,26 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import {
-  X,
-  Phone,
-  Video,
-  Pin,
-  PinOff,
-  BellOff,
-  Bell,
-  UserPlus,
-  LogOut,
-  ShieldOff,
-  Image as ImageIcon,
-} from "lucide-react";
+import { X, Phone, Video, Pin, PinOff, BellOff, Bell, UserPlus, LogOut, ShieldOff, ShieldCheck, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input, Switch } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { addChatMembers, leaveChat } from "@/lib/supabase/chats";
+import { setBlocked } from "@/lib/supabase/users";
 import { cn, formatLastSeen } from "@/lib/utils";
 import type { OmiChat, OmiUser } from "@/lib/types";
 
@@ -42,21 +31,42 @@ export function ChatInfoPanel({
   members: OmiUser[];
   meId: string | null;
   onStartCall: (kind: "audio" | "video") => void;
-  onTogglePin: () => Promise<void>;
-  onToggleMute: () => Promise<void>;
+  onTogglePin: (next: boolean) => Promise<void>;
+  onToggleMute: (next: boolean) => Promise<void>;
   pinned: boolean;
   muted: boolean;
 }) {
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [localPinned, setLocalPinned] = useState(pinned);
+  const [localMuted, setLocalMuted] = useState(muted);
+
+  useEffect(() => {
+    setLocalPinned(pinned);
+  }, [pinned]);
+
+  useEffect(() => {
+    setLocalMuted(muted);
+  }, [muted]);
 
   const peer = members[0];
 
+  // Detect current block state from the peer's blocked map
+  useEffect(() => {
+    if (peer && meId && peer.blocked) {
+      setIsBlocked(Boolean(peer.blocked[meId]));
+    }
+  }, [peer, meId]);
+
   return (
-    <AnimatePresence>
-      {open && (
-        <div className="absolute inset-0 z-40 flex justify-end">
+    <>
+      <AnimatePresence>
+        {open && (
+          <div key="chat-info-panel-drawer" className="absolute inset-0 z-40 flex justify-end">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -137,19 +147,25 @@ export function ChatInfoPanel({
               {/* preferences */}
               <section className="glass rounded-3xl px-4 py-1">
                 <Switch
-                  checked={pinned}
-                  onChange={() => void onTogglePin()}
+                  checked={localPinned}
+                  onChange={(val) => {
+                    setLocalPinned(val);
+                    void onTogglePin(val);
+                  }}
                   label="Pin conversation"
                   description="Keep it at the top of your list."
-                  icon={pinned ? <Pin className="size-4" /> : <PinOff className="size-4" />}
+                  icon={localPinned ? <Pin className="size-4 text-brand-600" /> : <PinOff className="size-4" />}
                 />
                 <div className="hairline" />
                 <Switch
-                  checked={muted}
-                  onChange={() => void onToggleMute()}
+                  checked={localMuted}
+                  onChange={(val) => {
+                    setLocalMuted(val);
+                    void onToggleMute(val);
+                  }}
                   label="Mute notifications"
                   description="Messages arrive quietly — no sound or badge."
-                  icon={muted ? <BellOff className="size-4" /> : <Bell className="size-4" />}
+                  icon={localMuted ? <BellOff className="size-4 text-rust-500" /> : <Bell className="size-4" />}
                 />
               </section>
 
@@ -215,17 +231,22 @@ export function ChatInfoPanel({
                   <LogOut className="size-4" />
                   {chat.kind === "group" ? "Leave group" : "Delete conversation"}
                 </button>
-                {chat.kind === "direct" && (
+                {chat.kind === "direct" && peer && meId && (
                   <button
-                    onClick={() =>
-                      toast("Blocking lives in Settings", {
-                        description: "Open Settings → Privacy to block or unblock people.",
-                      })
-                    }
-                    className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-sm text-fg-2 transition-colors hover:bg-fg/6 hover:text-fg"
+                    onClick={() => setBlockOpen(true)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-sm transition-colors",
+                      isBlocked
+                        ? "text-mint-700 hover:bg-mint-100/60"
+                        : "text-fg-2 hover:bg-fg/6 hover:text-fg",
+                    )}
                   >
-                    <ShieldOff className="size-4" />
-                    Block {peer?.displayName ?? "contact"}
+                    {isBlocked ? (
+                      <ShieldCheck className="size-4" />
+                    ) : (
+                      <ShieldOff className="size-4" />
+                    )}
+                    {isBlocked ? `Unblock ${peer.displayName}` : `Block ${peer.displayName}`}
                   </button>
                 )}
               </section>
@@ -233,6 +254,51 @@ export function ChatInfoPanel({
           </motion.aside>
         </div>
       )}
+      </AnimatePresence>
+
+      <Modal
+        open={blockOpen}
+        onClose={() => setBlockOpen(false)}
+        title={isBlocked ? `Unblock ${peer?.displayName}?` : `Block ${peer?.displayName}?`}
+        description={
+          isBlocked
+            ? `${peer?.displayName} will be able to message you again.`
+            : `${peer?.displayName} won't be able to message you or see when you're active.`
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setBlockOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant={isBlocked ? "primary" : "danger"}
+              loading={blockBusy}
+              onClick={async () => {
+                if (!meId || !peer) return;
+                setBlockBusy(true);
+                try {
+                  await setBlocked(meId, peer.uid, !isBlocked);
+                  setIsBlocked((v) => !v);
+                  toast.success(isBlocked ? `${peer.displayName} unblocked` : `${peer.displayName} blocked`);
+                  setBlockOpen(false);
+                } catch {
+                  toast.error("Couldn't update block status.");
+                } finally {
+                  setBlockBusy(false);
+                }
+              }}
+            >
+              {isBlocked ? "Unblock" : "Block"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-fg-2">
+          {isBlocked
+            ? "They'll be able to find you in search and send messages."
+            : "They won't know they've been blocked."}
+        </p>
+      </Modal>
 
       <Modal
         open={leaveOpen}
@@ -286,9 +352,10 @@ export function ChatInfoPanel({
         chat={chat}
         existing={members.map((m) => m.uid)}
       />
-    </AnimatePresence>
+    </>
   );
 }
+
 
 function AddMembersModal({
   open,

@@ -579,3 +579,227 @@
     overscroll-behavior-y: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   CSS FEATURE ADDITIONS (see analysis)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── CSS Feature #7: accent-color — brand all native form controls ── */
+:root {
+  accent-color: var(--color-brand-500);
+}
+
+/* ── CSS Feature #8: scrollbar-gutter: stable on message list ──────
+   Prevents horizontal shift when the scrollbar appears/disappears   */
+.min-h-0.flex-1.overflow-y-auto {
+  scrollbar-gutter: stable;
+}
+
+/* ── CSS Feature #12: overscroll-behavior: contain on all scroll areas ── */
+aside,
+.min-h-0.flex-1.overflow-y-auto,
+[data-scroll-contain] {
+  overscroll-behavior: contain;
+}
+
+/* ── CSS Feature #2: @starting-style native enter animations ──────── */
+@supports (animation-timeline: scroll()) or (selector(:has(*))) {
+  .msg-enter {
+    transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @starting-style {
+    .msg-enter {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+}
+
+/* ── CSS Feature #3: container queries on chat panels ─────────────── */
+.chat-panel-container {
+  container-type: inline-size;
+}
+
+@container (max-width: 520px) {
+  [data-msg] {
+    contain-intrinsic-size: auto 64px;
+  }
+}
+
+/* ── CSS Feature #13: :has() composer state styling ──────────────── */
+/* Expand composer border-radius when emoji tray is open */
+.composer-wrap:has(.emoji-tray-open) {
+  border-radius: var(--radius-4xl);
+}
+
+/* Highlight send button when there's content */
+.composer-wrap:has(textarea:not(:placeholder-shown)) .send-btn-idle {
+  background: var(--color-brand-500);
+  color: var(--color-on-accent);
+}
+
+/* ── CSS Feature #9: Houdini @property for gradient upload progress ─ */
+@property --upload-pct {
+  syntax: "<percentage>";
+  initial-value: 0%;
+  inherits: false;
+}
+
+.upload-progress-fill {
+  background: linear-gradient(
+    90deg,
+    var(--color-brand-400) var(--upload-pct),
+    transparent var(--upload-pct)
+  );
+  transition: --upload-pct 0.25s ease;
+}
+
+/* ── CSS Feature #15: will-change for animated blur layers ───────── */
+.call-overlay,
+[data-animated-blur] {
+  will-change: backdrop-filter, opacity;
+}
+
+/* ── CSS Feature #11: sticky unread banner ────────────────────────── */
+.unread-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(
+    135deg,
+    var(--color-brand-500),
+    var(--color-brand-700)
+  );
+  color: var(--color-on-accent);
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0 0 1rem 1rem;
+}
+
+/* ── CSS Feature #4: smooth theme/accent transitions ──────────────── */
+:root {
+  transition: background-color 0.4s ease, color 0.2s ease;
+}
+
+/* ── CSS Feature #5: View Transitions API ─────────────────────────── */
+@view-transition {
+  navigation: auto;
+}
+
+.chat-sidebar-vt {
+  view-transition-name: chat-sidebar;
+}
+
+.conversation-panel-vt {
+  view-transition-name: conversation-panel;
+}
+
+/* Custom view transition animations */
+::view-transition-old(conversation-panel) {
+  animation: 0.22s cubic-bezier(0.16, 1, 0.3, 1) both fade-slide-out;
+}
+
+::view-transition-new(conversation-panel) {
+  animation: 0.22s cubic-bezier(0.16, 1, 0.3, 1) both fade-slide-in;
+}
+
+@keyframes fade-slide-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(-16px); }
+}
+
+@keyframes fade-slide-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── CSS Feature #14: clamp() fluid type scale for headings ──────── */
+.heading-display {
+  font-size: clamp(1.5rem, 4vw + 0.8rem, 2.8rem);
+  line-height: 1.15;
+}
+
+.heading-xl {
+  font-size: clamp(1.2rem, 3vw + 0.6rem, 2rem);
+}
+
+/* ── CSS Feature #1: Dark Mode token overrides ────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   MIDNIGHT DARK THEME [data-theme="dark"]
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme="dark"] {
+  --color-ink-950: #0a0d14;
+  --color-ink-900: #101420;
+  --color-ink-850: #161b2a;
+  --color-ink-800: #1d2336;
+  --color-ink-750: #252d44;
+  --color-ink-700: #2d3652;
+  --color-ink-600: #3e4a6e;
+  --color-ink-500: #586794;
+
+  --color-fg:     #f1f4fb;
+  --color-fg-2:   #cbd2e3;
+  --color-fg-3:   #8a96b4;
+  --color-muted:  #5e6b8c;
+  --color-surface: #121726;
+  --color-surface-2: #181f33;
+  --color-surface-3: #202740;
+  --color-line:   #232a3f;
+  --color-line-strong: #2f3854;
+
+  --color-brand-500: #4f86f7;
+  --color-brand-600: #3670dd;
+  --color-brand-700: #2255b8;
+
+  color-scheme: dark;
+}
+
+[data-theme="dark"] .glass {
+  background: linear-gradient(
+    152deg,
+    rgb(18 23 38 / 0.9) 0%,
+    rgb(14 18 30 / 0.8) 46%,
+    rgb(10 13 22 / 0.7) 100%
+  );
+  backdrop-filter: blur(26px) saturate(190%);
+  -webkit-backdrop-filter: blur(26px) saturate(190%);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.08),
+    0 2px 6px -3px rgb(0 0 0 / 0.5),
+    0 18px 46px -26px rgb(0 0 0 / 0.7);
+}
+
+[data-theme="dark"] .glass-strong {
+  background: linear-gradient(
+    152deg,
+    rgb(22 28 46 / 0.96) 0%,
+    rgb(18 23 38 / 0.9) 45%,
+    rgb(14 18 30 / 0.85) 100%
+  );
+  backdrop-filter: blur(38px) saturate(200%);
+  -webkit-backdrop-filter: blur(38px) saturate(200%);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 0.12),
+    0 3px 10px -4px rgb(0 0 0 / 0.55),
+    0 28px 66px -28px rgb(0 0 0 / 0.8);
+}
+
+[data-theme="dark"] .glass-subtle {
+  background: rgb(18 23 38 / 0.65);
+  border: 1px solid rgb(255 255 255 / 0.07);
+}
+
+/* ── CSS Feature #6: gradient mesh auth background ────────────────── */
+.mesh-bg {
+  background:
+    conic-gradient(from 120deg at 22% 32%, color-mix(in oklch, var(--color-brand-200) 55%, transparent) 0deg, transparent 90deg),
+    conic-gradient(from 300deg at 78% 68%, color-mix(in oklch, var(--color-gold-300) 50%, transparent) 0deg, transparent 120deg),
+    conic-gradient(from 200deg at 55% 10%, color-mix(in oklch, var(--color-mint-200) 35%, transparent) 0deg, transparent 80deg),
+    var(--color-ink-950);
+}
+

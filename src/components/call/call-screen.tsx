@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -89,22 +89,28 @@ export function CallScreen({ callId }: { callId: string }) {
     });
   }, [uid, callId]);
 
+  const searchParams = useSearchParams();
+  const queryPeerId = searchParams?.get("peerId") ?? null;
+  const queryPeerName = searchParams?.get("peerName") ?? null;
+  const queryKind = (searchParams?.get("kind") as "audio" | "video" | null) ?? null;
+
   /* ── who am I talking to? ─────────────────────────────────── */
   const peerId = useMemo(() => {
-    if (ring) return ring.peerId;
+    if (ring?.peerId) return ring.peerId;
     if (call && uid) {
-      return Object.keys(call.members).find((m) => m !== uid) ?? null;
+      const found = Object.keys(call.members).find((m) => m !== uid);
+      if (found) return found;
     }
-    return null;
-  }, [ring, call, uid]);
+    return queryPeerId || null;
+  }, [ring, call, uid, queryPeerId]);
 
-  const peerName = ring?.peerName ?? "Omi contact";
-  const isCaller = Boolean(call && uid && call.initiatedBy === uid);
+  const peerName = ring?.peerName ?? queryPeerName ?? "Omi contact";
+  const isCaller = Boolean((call && uid && call.initiatedBy === uid) || (queryPeerId && uid));
   const answered = Boolean(call?.answeredAt) || ring?.status === "active";
-  const kind = call?.kind ?? ring?.kind ?? "audio";
+  const kind = (call?.kind ?? ring?.kind ?? queryKind ?? "audio") as "audio" | "video";
 
-  // The callee only starts capturing once the call has been accepted.
-  const engineActive = Boolean(call && uid && peerId && !call.endedAt && (isCaller || answered));
+  // The caller starts immediately; callee starts once call is accepted
+  const engineActive = Boolean(uid && peerId && !call?.endedAt && (isCaller || answered));
 
   /* ── teardown on unmount ──────────────────────────────────── */
   const finish = useCallback(

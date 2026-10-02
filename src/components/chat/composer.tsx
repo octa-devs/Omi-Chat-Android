@@ -10,19 +10,61 @@ import {
   X,
   CornerUpLeft,
   Loader2,
+  Mic,
+  MicOff,
+  Square,
+  ThumbsUp,
+  Heart,
+  Laugh,
+  Meh,
+  Frown,
+  Flame,
+  Star,
+  Zap,
+  Moon,
+  Coffee,
+  Rocket,
+  MessageCircle,
+  Phone as PhoneIcon,
+  Headphones,
+  Rainbow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, errorMessage } from "@/lib/utils";
+import { saveDraft } from "@/hooks/use-chat-data";
 import type { OmiMessage } from "@/lib/types";
 
-const EMOJI = [
-  "😀","😂","🥹","😍","🤩","😎","🤔","🙌","👋","👍","👏","🙏","🔥","✨","💜","🎉",
-  "😅","😭","😴","🤯","🥳","😇","🤝","💯","⚡","🌙","☕","🚀","💬","📞","🎧","🌈",
+/** Bug #6 Fix: enforce a sane maximum message length */
+const MAX_MSG_LENGTH = 4000;
+
+/**
+ * All emojis replaced with Lucide icon components.
+ * Each entry maps a Lucide icon + the emoji character it inserts.
+ */
+const ICON_EMOJIS: Array<{ icon: React.ElementType; emoji: string; label: string }> = [
+  { icon: Smile,        emoji: "😀", label: "Smile"      },
+  { icon: Laugh,        emoji: "😂", label: "Laugh"      },
+  { icon: Heart,        emoji: "❤️", label: "Heart"      },
+  { icon: ThumbsUp,     emoji: "👍", label: "Like"       },
+  { icon: Frown,        emoji: "😢", label: "Sad"        },
+  { icon: Meh,          emoji: "🤔", label: "Thinking"   },
+  { icon: Flame,        emoji: "🔥", label: "Fire"       },
+  { icon: Star,         emoji: "⭐", label: "Star"       },
+  { icon: Zap,          emoji: "⚡", label: "Zap"        },
+  { icon: Moon,         emoji: "🌙", label: "Moon"       },
+  { icon: Coffee,       emoji: "☕", label: "Coffee"     },
+  { icon: Rocket,       emoji: "🚀", label: "Rocket"     },
+  { icon: MessageCircle,emoji: "💬", label: "Chat"       },
+  { icon: PhoneIcon,    emoji: "📞", label: "Call"       },
+  { icon: Headphones,   emoji: "🎧", label: "Music"      },
+  { icon: Rainbow,      emoji: "🌈", label: "Rainbow"    },
 ];
 
 export function Composer({
+  chatId,
   onSend,
   onAttach,
+  onVoice,
   onTyping,
   replyTo,
   onCancelReply,
@@ -30,12 +72,15 @@ export function Composer({
   disabled,
   placeholder = "Type a message…",
 }: {
+  chatId?: string;
   onSend: (text: string) => Promise<void>;
   /** Parent owns the upload + send so this component stays transport-agnostic. */
   onAttach: (
     file: File,
     onProgress: (pct: number) => void,
   ) => Promise<void>;
+  /** Voice message handler */
+  onVoice?: (blob: Blob, durationSec: number) => Promise<void>;
   onTyping: (typing: boolean) => void;
   replyTo: OmiMessage | null;
   onCancelReply: () => void;
@@ -43,10 +88,24 @@ export function Composer({
   disabled?: boolean;
   placeholder?: string;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => {
+    if (!chatId) return "";
+    return typeof window !== "undefined"
+      ? (localStorage.getItem(`omi:draft:${chatId}`) ?? "")
+      : "";
+  });
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [uploadPct, setUploadPct] = useState<number | null>(null);
+
+  // Voice recording state
+  const [recording, setRecording] = useState(false);
+  const [recordSecs, setRecordSecs] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordStartRef = useRef<number>(0);
+
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLInputElement>(null);
@@ -75,6 +134,12 @@ export function Composer({
     [onTyping],
   );
 
+  /* Draft persistence: save on every text change */
+  useEffect(() => {
+    if (!chatId) return;
+    saveDraft(chatId, text);
+  }, [chatId, text]);
+
   const signalTyping = (value: string) => {
     if (typingRef.current) clearTimeout(typingRef.current);
     if (!isTypingRef.current && value.trim()) {
@@ -94,6 +159,7 @@ export function Composer({
     if (!value || sending || disabled) return;
     setSending(true);
     setText("");
+    if (chatId) saveDraft(chatId, ""); // clear draft on send
     if (typingRef.current) clearTimeout(typingRef.current);
     if (isTypingRef.current) {
       isTypingRef.current = false;
@@ -130,7 +196,87 @@ export function Composer({
     }
   };
 
+  /* ── Paste image attachments from clipboard ──────────────── */
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          void attach(file);
+          return;
+        }
+      }
+    }
+  };
+
+  /* ── Voice recording ──────────────────────────────────────── */
+  const startRecording = async () => {
+    if (!onVoice) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      recordChunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) recordChunksRef.current.push(e.data);
+      };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
+        const durationSec = (Date.now() - recordStartRef.current) / 1000;
+        if (blob.size > 0 && onVoice) {
+          try {
+            await onVoice(blob, durationSec);
+          } catch (e) {
+            toast.error(errorMessage(e) || "Failed to send voice message.");
+          }
+        }
+        setRecording(false);
+        setRecordSecs(0);
+      };
+      mr.start(250);
+      mediaRecorderRef.current = mr;
+      recordStartRef.current = Date.now();
+      setRecording(true);
+      setRecordSecs(0);
+      recordTimerRef.current = setInterval(() => {
+        setRecordSecs(Math.floor((Date.now() - recordStartRef.current) / 1000));
+      }, 500);
+    } catch {
+      toast.error("Microphone access was blocked or unavailable.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    mediaRecorderRef.current?.stop();
+  };
+
+  const cancelRecording = () => {
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    mediaRecorderRef.current?.stream?.getTracks().forEach((t) => t.stop());
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      recordChunksRef.current = []; // discard
+      mediaRecorderRef.current?.stop();
+    }
+    setRecording(false);
+    setRecordSecs(0);
+  };
+
   const uploading = uploadPct !== null;
+
+  const formatRecordSecs = (s: number) => {
+    const m = Math.floor(s / 60).toString().padStart(2, "0");
+    const sec = (s % 60).toString().padStart(2, "0");
+    return `${m}:${sec}`;
+  };
+
+  // Bug #6 Fix: remaining character count helper
+  const remaining = MAX_MSG_LENGTH - text.length;
+  const nearLimit = remaining < 200;
 
   return (
     <div className="px-3 pt-2 pb-3 sm:px-4 sm:pb-4">
@@ -165,7 +311,7 @@ export function Composer({
         )}
       </AnimatePresence>
 
-      {/* emoji tray */}
+      {/* icon-based emoji tray — emojis replaced with Lucide icons */}
       <AnimatePresence>
         {emojiOpen && (
           <motion.div
@@ -175,16 +321,18 @@ export function Composer({
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             className="glass-strong mb-2 grid grid-cols-8 gap-1 rounded-3xl p-2.5 sm:grid-cols-16"
           >
-            {EMOJI.map((e) => (
+            {ICON_EMOJIS.map(({ icon: Icon, emoji, label }) => (
               <button
-                key={e}
+                key={label}
                 onClick={() => {
-                  setText((t) => t + e);
+                  setText((t) => t + emoji);
                   taRef.current?.focus();
                 }}
-                className="grid size-8 place-items-center rounded-xl text-lg transition-transform duration-200 hover:scale-125 hover:bg-fg/8"
+                aria-label={label}
+                title={label}
+                className="grid size-9 place-items-center rounded-xl text-fg-3 transition-all duration-200 hover:scale-125 hover:bg-brand-50 hover:text-brand-600"
               >
-                {e}
+                <Icon className="size-4" />
               </button>
             ))}
           </motion.div>
@@ -216,6 +364,48 @@ export function Composer({
         )}
       </AnimatePresence>
 
+      {/* voice recording indicator */}
+      <AnimatePresence>
+        {recording && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="mb-2 flex items-center gap-3 rounded-2xl border border-rust-200 bg-rust-50 px-4 py-2.5"
+          >
+            <span className="size-2 animate-pulse rounded-full bg-rust-500" />
+            <span className="flex-1 text-xs font-medium text-rust-700">
+              Recording — {formatRecordSecs(recordSecs)}
+            </span>
+            <button
+              type="button"
+              onClick={cancelRecording}
+              aria-label="Cancel recording"
+              className="rounded-full p-1 text-rust-600 transition-colors hover:bg-rust-100"
+            >
+              <X className="size-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bug #6 Fix: character limit warning */}
+      <AnimatePresence>
+        {nearLimit && text.length > 0 && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className={cn(
+              "mb-1 text-right text-[0.62rem] tabular-nums",
+              remaining <= 0 ? "text-rust-600" : "text-fg-3",
+            )}
+          >
+            {remaining} / {MAX_MSG_LENGTH}
+          </motion.p>
+        )}
+      </AnimatePresence>
+
       {/* composer bar */}
       <div
         className={cn(
@@ -234,7 +424,7 @@ export function Composer({
         <IconButton
           label="Attach file"
           onClick={() => fileRef.current?.click()}
-          disabled={disabled || uploading}
+          disabled={disabled || uploading || recording}
         >
           <Paperclip className="size-4.5" />
         </IconButton>
@@ -242,7 +432,7 @@ export function Composer({
         <IconButton
           label="Send a photo"
           onClick={() => imgRef.current?.click()}
-          disabled={disabled || uploading}
+          disabled={disabled || uploading || recording}
         >
           <ImageIcon className="size-4.5" />
         </IconButton>
@@ -251,51 +441,71 @@ export function Composer({
           ref={taRef}
           value={text}
           rows={1}
-          disabled={disabled}
+          disabled={disabled || recording}
+          maxLength={MAX_MSG_LENGTH}
           onChange={(e) => {
             setText(e.target.value);
             signalTyping(e.target.value);
           }}
+          onPaste={handlePaste}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              const wantsSend = enterToSend
-                ? !e.shiftKey
-                : (e.metaKey || e.ctrlKey) && !e.shiftKey;
-              if (wantsSend) {
-                e.preventDefault();
-                void send();
-              }
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send();
             }
           }}
-          placeholder={placeholder}
+          placeholder={recording ? "Release to send…" : placeholder}
           aria-label="Message"
           className="max-h-45 min-h-9 flex-1 resize-none bg-transparent px-1.5 py-2 text-[0.9rem] leading-relaxed text-fg outline-none placeholder:text-fg-3"
         />
 
-        <motion.button
-          type="button"
-          onClick={() => void send()}
-          disabled={!text.trim() || sending || disabled}
-          whileTap={{ scale: 0.9 }}
-          whileHover={text.trim() ? { scale: 1.06 } : undefined}
-          aria-label="Send message"
-          className={cn(
-            "grid size-10 shrink-0 place-items-center rounded-full transition-all duration-300",
-            text.trim() && !disabled
-              ? "bg-[linear-gradient(125deg,var(--color-brand-500),var(--color-brand-700))] text-on-accent shadow-[0_8px_26px_-8px_rgba(42,103,204,0.32)]"
-              : "bg-ink-800 text-fg-3",
-          )}
-        >
-          {sending ? (
-            <Loader2 className="size-4.5 animate-spin" />
-          ) : (
-            <ArrowUp className="size-4.5" />
-          )}
-        </motion.button>
+        {/* Send or Voice button */}
+        {text.trim() ? (
+          <motion.button
+            type="button"
+            onClick={() => void send()}
+            disabled={!text.trim() || sending || disabled || text.length > MAX_MSG_LENGTH}
+            whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.06 }}
+            aria-label="Send message"
+            className={cn(
+              "grid size-10 shrink-0 place-items-center rounded-full transition-all duration-300",
+              text.trim() && !disabled && text.length <= MAX_MSG_LENGTH
+                ? "bg-[linear-gradient(125deg,var(--color-brand-500),var(--color-brand-700))] text-on-accent shadow-[0_8px_26px_-8px_rgba(42,103,204,0.32)]"
+                : "bg-ink-800 text-fg-3",
+            )}
+          >
+            {sending ? (
+              <Loader2 className="size-4.5 animate-spin" />
+            ) : (
+              <ArrowUp className="size-4.5" />
+            )}
+          </motion.button>
+        ) : onVoice ? (
+          <motion.button
+            type="button"
+            onPointerDown={() => void startRecording()}
+            onPointerUp={stopRecording}
+            onPointerLeave={stopRecording}
+            disabled={disabled || uploading}
+            whileTap={{ scale: 0.9 }}
+            aria-label={recording ? "Stop recording" : "Hold to record voice message"}
+            className={cn(
+              "grid size-10 shrink-0 place-items-center rounded-full transition-all duration-300",
+              recording
+                ? "animate-pulse bg-rust-500 text-white shadow-[0_8px_26px_-8px_rgba(194,30,60,0.5)]"
+                : "bg-ink-800 text-fg-3 hover:bg-brand-100 hover:text-brand-600",
+            )}
+          >
+            {recording ? <Square className="size-4.5 fill-current" /> : <Mic className="size-4.5" />}
+          </motion.button>
+        ) : (
+          <div className="size-10 shrink-0" /> /* spacer when no voice support */
+        )}
       </div>
 
       <p className="mt-2 px-2 text-center text-[0.62rem] text-fg-3">
-        {enterToSend ? "Enter to send · Shift+Enter for a new line" : "Ctrl/⌘ + Enter to send"}
+        Press Enter to send · Shift + Enter for new line
       </p>
 
       <input
