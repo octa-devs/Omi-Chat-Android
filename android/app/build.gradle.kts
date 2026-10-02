@@ -124,4 +124,7 @@ dependencies {
     // Themed splash screen. Without this the launcher hands off to a blank
     // window while the WebView spins up, which reads as a slow cold start.
     implementation("androidx.core:core-splashscreen:1.0.1")
+
+    // Smooth native pull-to-refresh
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 }

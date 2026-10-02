@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
     private var permissionRequest: PermissionRequest? = null
     private var googleDialog: AlertDialog? = null
     private var lastFailedUrl: String? = null
+    private var isPageLoading: Boolean = true
 
     /** Host of the deployed site. Everything on it stays inside the WebView. */
     private val appHost: String =
@@ -90,13 +91,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Must run before super.onCreate().
-        installSplashScreen()
+        // Keep splash screen until initial page render commits to prevent white flash/lag
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        splashScreen.setKeepOnScreenCondition { isPageLoading }
 
         // The site is light-only, so the system bars get dark icons explicitly.
-        // The default auto() style would pick white icons from the *system*
-        // dark-mode setting and leave them invisible over our light page.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(
                 android.R.color.transparent,
@@ -111,7 +111,13 @@ class MainActivity : ComponentActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Safety fallback to dismiss splash screen if network is slow
+        binding.root.postDelayed({
+            isPageLoading = false
+        }, 2500)
+
         applyInsets()
+        configureSwipeRefresh()
         configureWebView()
         configureChromeClient()
         configureWebViewClient()
@@ -133,13 +139,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun configureSwipeRefresh() {
+        binding.swipeRefresh.setColorSchemeColors(
+            ContextCompat.getColor(this, R.color.omi_brand_400)
+        )
+        binding.swipeRefresh.setOnRefreshListener {
+            binding.web.reload()
+        }
+        // Only allow pull-down refresh when WebView is at the top
+        binding.swipeRefresh.setOnChildScrollUpCallback { _, _ ->
+            binding.web.scrollY > 0
+        }
+    }
+
     /**
      * Keeps content clear of the status bar, the navigation bar, display cutouts
      * and the keyboard.
-     *
-     * The IME is only padded manually from Android 11 onwards. Below that,
-     * windowSoftInputMode="adjustResize" still shrinks the window, so padding
-     * as well would lift the composer twice its height.
      */
     private fun applyInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
@@ -154,9 +169,6 @@ class MainActivity : ComponentActivity() {
                     0
                 }
             view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, imeBottom))
-            // Consumed on purpose: the WebView is not a ViewGroup that knows how
-            // to inset itself, and letting the insets travel further down would
-            // have it pad a second time.
             WindowInsetsCompat.CONSUMED
         }
     }
@@ -166,24 +178,27 @@ class MainActivity : ComponentActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
 
         with(binding.web) {
+            // Hardware acceleration layer for 60/120fps fluid rendering
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
             setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.omi_surface))
 
-            // The site draws its own scroll affordances; Android's overscroll
-            // glow and the two scrollbars would both be redundant chrome.
             overScrollMode = View.OVER_SCROLL_NEVER
             isVerticalScrollBarEnabled = false
             isHorizontalScrollBarEnabled = false
+            isNestedScrollingEnabled = false
 
             settings.apply {
                 javaScriptEnabled = true
-                // Required: Supabase keeps the session and the realtime channel
-                // auth token in localStorage, so without this nobody stays
-                // signed in.
                 domStorageEnabled = true
+                databaseEnabled = true
 
-                // The site is an ordinary document that ships its own viewport
-                // meta tag. Leaving pinch-zoom on instead makes a double-tap
-                // resolve as a delayed zoom rather than an immediate tap.
+                // Pre-rasterize offscreen tiles for buttery smooth zero-lag scrolling
+                offscreenPreRaster = true
+
+                useWideViewPort = true
+                loadWithOverviewMode = true
+                textZoom = 100
+
                 setSupportZoom(false)
                 builtInZoomControls = false
                 displayZoomControls = false
@@ -221,13 +236,22 @@ class MainActivity : ComponentActivity() {
     private fun configureChromeClient() {
         binding.web.webChromeClient = object : WebChromeClient() {
 
+            override fun onProgressChanged(view: WebView, newProgress: Int) {
+                if (newProgress < 100) {
+                    binding.progressBar.isVisible = true
+                    binding.progressBar.progress = newProgress
+                } else {
+                    binding.progressBar.isVisible = false
+                    isPageLoading = false
+                    binding.swipeRefresh.isRefreshing = false
+                }
+            }
+
             /**
              * Camera and microphone for calls. Requested lazily - a user who
              * never places a call is never prompted.
              */
             override fun onPermissionRequest(request: PermissionRequest) {
-                // Only the site itself may ask. Without this check any iframe it
-                // embeds could put a prompt up in the user's face.
                 if (!request.origin.host.equals(appHost, ignoreCase = true)) {
                     request.deny()
                     return
@@ -256,15 +280,10 @@ class MainActivity : ComponentActivity() {
                 filePathCallback: ValueCallback<Array<Uri>>,
                 fileChooserParams: FileChooserParams,
             ): Boolean {
-                // The WebView only ever holds one pending chooser; answering the
-                // previous one with null is what stops the page hanging.
                 fileChooserCallback?.onReceiveValue(null)
                 fileChooserCallback = filePathCallback
 
                 return try {
-                    // createIntent() honours accept/capture/multiple, which the
-                    // naive ACTION_GET_CONTENT loses. ACTION_GET_CONTENT also
-                    // means no storage permission is ever requested.
                     fileChooser.launch(
                         if (fileChooserParams.acceptTypes.isEmpty()) {
                             Intent(Intent.ACTION_GET_CONTENT).apply { type = "*/*" }
@@ -302,6 +321,19 @@ class MainActivity : ComponentActivity() {
                 favicon: android.graphics.Bitmap?,
             ) {
                 binding.error.isVisible = false
+                binding.progressBar.isVisible = true
+            }
+
+            override fun onPageCommitVisible(view: WebView, url: String) {
+                isPageLoading = false
+                binding.progressBar.isVisible = false
+                binding.swipeRefresh.isRefreshing = false
+            }
+
+            override fun onPageFinished(view: WebView, url: String) {
+                isPageLoading = false
+                binding.progressBar.isVisible = false
+                binding.swipeRefresh.isRefreshing = false
             }
 
             override fun onReceivedError(
@@ -309,9 +341,10 @@ class MainActivity : ComponentActivity() {
                 request: WebResourceRequest,
                 error: WebResourceError,
             ) {
-                // A dead avatar or a font that 404s must not replace a working
-                // conversation with an error screen. Only the document counts.
                 if (!request.isForMainFrame) return
+                isPageLoading = false
+                binding.progressBar.isVisible = false
+                binding.swipeRefresh.isRefreshing = false
                 lastFailedUrl = request.url.toString()
                 binding.error.isVisible = true
             }
@@ -321,9 +354,16 @@ class MainActivity : ComponentActivity() {
                 request: WebResourceRequest,
                 errorResponse: android.webkit.WebResourceResponse,
             ) {
-                // Deliberately ignored. The site renders its own not-found and
-                // auth-failure pages, and intercepting 4xx here would replace
-                // them with the generic network error.
+                // Deliberately ignored for 4xx custom pages
+            }
+
+            override fun onRenderProcessGone(
+                view: WebView,
+                detail: android.webkit.RenderProcessGoneDetail,
+            ): Boolean {
+                Log.w(TAG, "WebView render process gone. Crashed: ${detail.didCrash()}")
+                binding.web.loadUrl(lastFailedUrl ?: BuildConfig.WEB_ORIGIN)
+                return true
             }
         }
     }

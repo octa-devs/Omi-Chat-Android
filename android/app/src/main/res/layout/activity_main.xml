@@ -5,11 +5,30 @@
     android:layout_height="match_parent"
     android:background="@color/omi_surface">
 
-    <WebView
-        android:id="@+id/web"
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipeRefresh"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/omi_surface" />
+        android:layout_height="match_parent">
+
+        <WebView
+            android:id="@+id/web"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:isScrollContainer="true"
+            android:background="@color/omi_surface" />
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <ProgressBar
+        android:id="@+id/progressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="top"
+        android:indeterminate="false"
+        android:max="100"
+        android:progressDrawable="@color/omi_brand_400"
+        android:visibility="gone" />
 
     <!--
         Shown only when the document itself fails to load. Sub-resource failures
