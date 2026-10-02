@@ -1,0 +1,25 @@
+{
+  "name": "Omi Chat",
+  "short_name": "Omi",
+  "description": "Premium realtime messaging and WebRTC voice & video calling.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05050a",
+  "theme_color": "#05050a",
+  "orientation": "portrait-primary",
+  "categories": ["social", "communication"],
+  "icons": [
+    {
+      "src": "/brand/omi-chat-logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/omi-chat-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

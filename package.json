@@ -1,0 +1,48 @@
+{
+    "name": "omi-chat",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Omi Chat — a premium glassmorphic realtime chat & WebRTC calling app powered by Supabase.",
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+        "build:worker": "opennextjs-cloudflare build",
+        "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+        "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+        "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+        "lint": "eslint .",
+        "typecheck": "tsc --noEmit",
+        "db:reset": "echo \"Paste supabase/migrations/*.sql into the Supabase SQL editor.\"",
+        "db:check": "node scripts/check-sql.js"
+    },
+    "dependencies": {
+        "@opennextjs/cloudflare": "^1.20.7",
+        "@supabase/ssr": "^0.12.7",
+        "@supabase/supabase-js": "^2.117.2",
+        "class-variance-authority": "^0.7.1",
+        "clsx": "^2.1.1",
+        "framer-motion": "^12.43.0",
+        "lucide-react": "^1.49.0",
+        "next": "16.3.8",
+        "react": "19.3.0",
+        "react-dom": "19.3.0",
+        "sonner": "^2.0.8",
+        "tailwind-merge": "^3.7.0",
+        "zustand": "^5.0.15"
+    },
+    "devDependencies": {
+        "@tailwindcss/postcss": "^4.3.3",
+        "@types/node": "^24.10.1",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+        "eslint": "^9.39.1",
+        "eslint-config-next": "16.3.8",
+        "pgsql-parser": "^18.2.8",
+        "postcss": "^8.5.28",
+        "tailwindcss": "^4.3.3",
+        "typescript": "^5.9.3",
+        "wrangler": "^4.146.0"
+    }
+}

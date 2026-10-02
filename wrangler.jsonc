@@ -1,0 +1,35 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "main": ".open-next/worker.js",
+    "name": "omi-chat",
+    // 2024-09-23 is the earliest date @opennextjs/cloudflare supports. Older
+    // dates lack the Node.js APIs the adapter relies on at runtime.
+    "compatibility_date": "2024-12-30",
+    "compatibility_flags": [
+        // Required. The adapter runs the Next.js server through the Workers
+        // Node.js compatibility layer, so without this nothing resolves.
+        "nodejs_compat",
+        // Keeps fetch() from reaching anything bound to a private address. The
+        // app only ever calls the public Supabase and TURN endpoints.
+        "global_fetch_strictly_public",
+    ],
+    "assets": {
+        "directory": ".open-next/assets",
+        "binding": "ASSETS",
+    },
+    "services": [
+        {
+            // Lets the Worker call itself for ISR revalidation.
+            "binding": "WORKER_SELF_REFERENCE",
+            "service": "omi-chat",
+        },
+    ],
+    "images": {
+        // next/image is used for avatars and the logo, so image optimisation
+        // has to be bound rather than falling back to the origin.
+        "binding": "IMAGES",
+    },
+    "observability": {
+        "enabled": true,
+    },
+}
