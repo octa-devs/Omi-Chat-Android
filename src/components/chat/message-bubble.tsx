@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Check,
@@ -29,7 +29,7 @@ export interface MessageActions {
   onDelete: (m: OmiMessage) => void;
 }
 
-export function MessageBubble({
+function MessageBubbleInner({
   message,
   mine,
   grouped,
@@ -86,13 +86,23 @@ export function MessageBubble({
   };
 
   return (
-    <motion.div
-      layout="position"
-      initial={{ opacity: 0, y: 10, scale: 0.985 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+    <div
+      // Was motion.div with layout="position". Framer-motion's layout
+      // animation measures this element's box before and after every render,
+      // so a conversation of a few hundred messages meant a few hundred
+      // forced layout reads on every keystroke and every incoming message.
+      // That was the single largest source of scroll jank on a phone. The
+      // entrance is a plain CSS keyframe instead, which the compositor handles
+      // without touching layout at all.
+      //
+      // content-visibility lets the browser skip laying out and painting
+      // bubbles that are scrolled out of view, while contain-intrinsic-size
+      // keeps the scrollbar the right length. It is what replaces the windowing
+      // a longer list would otherwise need, and it needs no measurement code.
+      data-msg
       className={cn(
         "group/msg flex items-end gap-2 px-4",
+        "msg-enter",
         mine ? "flex-row-reverse" : "flex-row",
         grouped ? "mt-0.5" : "mt-3",
       )}
@@ -312,9 +322,22 @@ export function MessageBubble({
           </motion.div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
+
+/**
+ * Memoised because the conversation re-renders on every incoming message, on
+ * every keystroke in the composer, and on every scroll tick that flips the
+ * "at bottom" flag. Without this, one new message meant re-rendering and
+ * re-running every earlier bubble's markup, which is O(n) per message.
+ *
+ * This only pays off because the props are genuinely stable: `message` is the
+ * same object from state, and `onReply`/`onEdit`/`onDelete` are useCallback'd
+ * in the parent. If a callback there ever loses its dependency array the memo
+ * silently stops helping, so keep them stable.
+ */
+export const MessageBubble = memo(MessageBubbleInner);
 
 function IconAction({
   label,

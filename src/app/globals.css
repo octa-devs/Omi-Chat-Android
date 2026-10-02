@@ -484,3 +484,98 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   MESSAGE LIST
+   ═══════════════════════════════════════════════════════════════ */
+
+/*
+ * Replaces a framer-motion `layout` animation on every bubble.
+ *
+ * layout="position" made the library measure each message's box before and
+ * after every render, so a long conversation cost hundreds of forced layout
+ * reads per keystroke and per incoming message. A compositor-only transform is
+ * visually equivalent here and costs nothing on the main thread.
+ */
+@keyframes msg-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.msg-enter {
+  animation: msg-enter 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/*
+ * Virtualisation, without virtualisation.
+ *
+ * content-visibility: auto lets the browser skip style, layout and paint for
+ * bubbles that are off screen, while contain-intrinsic-size keeps a
+ * placeholder height so the scrollbar stays honest. The effect is the same as
+ * windowing a long list, but it needs no measurement, no scroll maths and no
+ * scroll-anchoring fixes — which is where hand-rolled list virtualisation
+ * usually goes wrong.
+ *
+ * auto is relative to the viewport, so this only helps because the message
+ * list is the scrolling container. Chrome 85+, and the Android WebView is
+ * Chrome-based and current. Older engines ignore both properties and simply
+ * render everything, which is the previous behaviour.
+ */
+[data-msg] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
+
+/* Long transcripts are common, so cap the visual cost of very tall bubbles. */
+[data-msg] {
+  overflow-anchor: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE
+   ═══════════════════════════════════════════════════════════════ */
+
+/*
+ * In the WebView, the composer and the call controls sit against the system
+ * gesture bar and the status bar. Without these they render underneath it,
+ * which reads as a layout bug on a real device.
+ */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/*
+ * 44px is the smallest reliably tappable target. Several controls were
+ * sized in rem, which lands under that on a high-density phone screen.
+ */
+@media (pointer: coarse) {
+  button,
+  a[role="button"],
+  [role="tab"],
+  input[type="submit"] {
+    min-height: 44px;
+  }
+
+  /* Icon-only controls need the width raised too, or they stay tappable but tiny. */
+  button:has(> svg:only-child) {
+    min-width: 44px;
+  }
+}
+
+/* Stop iOS-style rubber banding and double-tap zoom from feeling like lag. */
+@media (pointer: coarse) {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    overscroll-behavior-y: none;
+  }
+}

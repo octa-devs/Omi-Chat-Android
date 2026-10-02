@@ -56,17 +56,6 @@ import type { OmiMessage, OmiUser } from "@/lib/types";
  * comparison against each peer's cursor rather than a lookup in a per-message
  * object — same answer, one fewer write per read.
  */
-function isReadByPeer(
-  m: OmiMessage,
-  cursors: Record<string, number> | undefined,
-  meId: string | null,
-) {
-  if (!cursors || !meId) return false;
-  for (const [uid, at] of Object.entries(cursors)) {
-    if (uid !== meId && m.createdAt <= at) return true;
-  }
-  return false;
-}
 export function Conversation({
   chatId,
   onBack,
@@ -138,16 +127,35 @@ export function Conversation({
     }
   }, [messages, messagesLoading, atBottom, lastMessage]);
 
-  const onScroll = () => {
+  /**
+   * Scroll fires far faster than React can usefully re-render, and the two
+   * reads below (scrollHeight, clientHeight) force a synchronous layout
+   * every time. Doing that on every event is what made long conversations
+   * stutter while scrolling.
+   *
+   * So: only touch state when the answer actually changes, and only mark the
+   * newest message read once per message rather than once per scroll event.
+   */
+  const readMarkedRef = useRef<string | null>(null);
+  const atBottomRef = useRef(true);
+
+  const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
+
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 140;
-    setAtBottom(near);
-    const lm = messages[messages.length - 1];
-    if (near && lm && uid && lm.senderId !== uid) {
-      void markMessageRead(chatId, lm.id, uid).catch(() => undefined);
+    if (near !== atBottomRef.current) {
+      atBottomRef.current = near;
+      setAtBottom(near);
     }
-  };
+    if (!near) return;
+
+    const lm = messages[messages.length - 1];
+    if (!uid || !lm || lm.senderId === uid) return;
+    if (readMarkedRef.current === lm.id) return;
+    readMarkedRef.current = lm.id;
+    void markMessageRead(chatId, lm.id, uid).catch(() => undefined);
+  }, [messages, uid, chatId]);
 
   /* ── actions ── */
   const handleSend = useCallback(
@@ -245,6 +253,43 @@ export function Conversation({
 
   const groups = useMemo(() => groupByDay(shown), [shown]);
   const typingVisible = typingNames.filter((n) => n !== profile?.displayName);
+
+  /* ── lookups hoisted out of the render loop ── */
+  // Both of these used to run once per message per render: a `.find` across
+  // members, and Object.entries() over the read cursors. In a long
+  // conversation that is thousands of comparisons and allocations every time
+  // anything at all re-renders.
+  const memberByUid = useMemo(() => {
+    const map = new Map<string, OmiUser>();
+    for (const m of members) map.set(m.uid, m);
+    return map;
+  }, [members]);
+
+  const peerCursors = useMemo(() => {
+    const cursors = chat?.readCursors;
+    if (!cursors || !uid) return null;
+    const at: number[] = [];
+    for (const [who, when] of Object.entries(cursors)) {
+      if (who !== uid) at.push(when);
+    }
+    return at.length ? at : null;
+  }, [chat?.readCursors, uid]);
+
+  const senderOf = useCallback(
+    (senderId: string) => memberByUid.get(senderId),
+    [memberByUid],
+  );
+
+  const readByPeer = useCallback(
+    (m: OmiMessage) => {
+      if (!peerCursors) return false;
+      for (const at of peerCursors) {
+        if (m.createdAt <= at) return true;
+      }
+      return false;
+    },
+    [peerCursors],
+  );
 
   /* ── states ── */
   if (chatLoading && !chat) {
@@ -480,7 +525,7 @@ export function Conversation({
                   const mine = m.senderId === uid;
                   const grouped = Boolean(prev && prev.senderId === m.senderId);
                   const tail = !next || next.senderId !== m.senderId;
-                  const sender = members.find((x) => x.uid === m.senderId);
+                  const sender = senderOf(m.senderId);
                   return (
                     <MessageBubble
                       key={m.id}
@@ -492,7 +537,7 @@ export function Conversation({
                       peerId={m.senderId}
                       peerName={sender?.displayName ?? m.senderName}
                       peerAvatar={sender?.avatarUrl}
-                      read={isReadByPeer(m, chat?.readCursors, uid)}
+                      read={readByPeer(m)}
                       onReply={setReplyTo}
                       onEdit={handleEdit}
                       onDelete={handleDelete}
