@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   markChatRead,
   watchChat,
@@ -104,8 +104,8 @@ export function useMessages(chatId: string | null, limit = 250) {
     setOptimistic((prev) => prev.filter((m) => m.id !== tempId));
   };
 
-  // Merge server messages with active optimistic messages
-  const mergedMessages = [
+  // Merge server messages with active optimistic messages with stable reference
+  const mergedMessages = useMemo(() => [
     ...messages,
     ...optimistic.filter(
       (opt) =>
@@ -118,7 +118,7 @@ export function useMessages(chatId: string | null, limit = 250) {
               Math.abs(m.createdAt - opt.createdAt) < 20000),
         ),
     ),
-  ];
+  ], [messages, optimistic]);
 
   return {
     messages: mergedMessages,
@@ -306,31 +306,51 @@ export function useNow(intervalMs = 60_000) {
   return now;
 }
 
-/* ── draft persistence ────────────────────────────────────── */
+/* ── draft persistence (in-memory cached + debounced) ───────── */
 
-/** Feature: Draft Persistence — save and restore composer text per chat. */
 const DRAFT_KEY = (chatId: string) => `omi:draft:${chatId}`;
+const draftCache = new Map<string, string>();
+const draftFlushTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export function getDraft(chatId: string): string {
   if (typeof window === "undefined") return "";
-  return localStorage.getItem(DRAFT_KEY(chatId)) ?? "";
+  if (draftCache.has(chatId)) {
+    return draftCache.get(chatId) ?? "";
+  }
+  const stored = localStorage.getItem(DRAFT_KEY(chatId)) ?? "";
+  draftCache.set(chatId, stored);
+  return stored;
 }
 
 export function saveDraft(chatId: string, text: string) {
   if (typeof window === "undefined") return;
-  if (text.trim()) {
-    localStorage.setItem(DRAFT_KEY(chatId), text);
-  } else {
-    localStorage.removeItem(DRAFT_KEY(chatId));
-  }
+  draftCache.set(chatId, text);
+
+  // Debounce disk/localStorage write
+  const existingTimer = draftFlushTimers.get(chatId);
+  if (existingTimer) clearTimeout(existingTimer);
+
+  const timer = setTimeout(() => {
+    if (text.trim()) {
+      localStorage.setItem(DRAFT_KEY(chatId), text);
+    } else {
+      localStorage.removeItem(DRAFT_KEY(chatId));
+    }
+    draftFlushTimers.delete(chatId);
+  }, 350);
+
+  draftFlushTimers.set(chatId, timer);
 }
 
 export function clearDraft(chatId: string) {
   if (typeof window === "undefined") return;
+  draftCache.set(chatId, "");
+  const existingTimer = draftFlushTimers.get(chatId);
+  if (existingTimer) clearTimeout(existingTimer);
   localStorage.removeItem(DRAFT_KEY(chatId));
 }
 
-/* ── starred messages ─────────────────────────────────────── */
+/* ── starred messages (in-memory cached O(1) lookups) ─────── */
 
 const STARRED_KEY = "omi:starred";
 
@@ -344,28 +364,53 @@ export interface StarredEntry {
   createdAt: number;
 }
 
-export function getStarred(): StarredEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(STARRED_KEY) ?? "[]") as StarredEntry[];
-  } catch {
-    return [];
+let starredCache: StarredEntry[] | null = null;
+let starredIdSet: Set<string> | null = null;
+
+function ensureStarredLoaded(): { list: StarredEntry[]; set: Set<string> } {
+  if (starredCache && starredIdSet) {
+    return { list: starredCache, set: starredIdSet };
   }
+  if (typeof window === "undefined") {
+    return { list: [], set: new Set() };
+  }
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STARRED_KEY) ?? "[]") as StarredEntry[];
+    starredCache = parsed;
+    starredIdSet = new Set(parsed.map((s) => s.messageId));
+  } catch {
+    starredCache = [];
+    starredIdSet = new Set();
+  }
+  return { list: starredCache, set: starredIdSet };
+}
+
+export function getStarred(): StarredEntry[] {
+  return ensureStarredLoaded().list;
 }
 
 export function toggleStar(entry: StarredEntry): boolean {
-  const all = getStarred();
-  const idx = all.findIndex((s) => s.messageId === entry.messageId);
+  const { list, set } = ensureStarredLoaded();
+  const idx = list.findIndex((s) => s.messageId === entry.messageId);
+
   if (idx >= 0) {
-    all.splice(idx, 1);
-    localStorage.setItem(STARRED_KEY, JSON.stringify(all));
+    list.splice(idx, 1);
+    set.delete(entry.messageId);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STARRED_KEY, JSON.stringify(list));
+    }
     return false; // now unstarred
   }
-  all.push(entry);
-  localStorage.setItem(STARRED_KEY, JSON.stringify(all));
+
+  list.push(entry);
+  set.add(entry.messageId);
+  if (typeof window !== "undefined") {
+    localStorage.setItem(STARRED_KEY, JSON.stringify(list));
+  }
   return true; // now starred
 }
 
 export function isStarred(messageId: string): boolean {
-  return getStarred().some((s) => s.messageId === messageId);
+  return ensureStarredLoaded().set.has(messageId);
 }
+
