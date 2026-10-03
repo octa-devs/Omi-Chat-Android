@@ -1,0 +1,41 @@
+{
+  "name": "omi-chat-native",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.117.2",
+    "clsx": "^2.1.1",
+    "expo": "~57.0.26",
+    "expo-auth-session": "~57.0.13",
+    "expo-constants": "~57.0.20",
+    "expo-crypto": "~57.0.3",
+    "expo-document-picker": "^57.0.3",
+    "expo-image-picker": "^57.0.20",
+    "expo-linear-gradient": "~57.0.2",
+    "expo-linking": "~57.0.11",
+    "expo-router": "~57.0.24",
+    "expo-status-bar": "~57.0.1",
+    "expo-web-browser": "~57.0.3",
+    "lucide-react-native": "^1.51.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "^15.15.5",
+    "zustand": "^5.0.15"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "doctor": "expo-doctor"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

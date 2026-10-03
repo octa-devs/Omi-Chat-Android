@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Omi Chat",
+    "slug": "omi-chat-native",
+    "version": "1.0.0",
+    "scheme": "omichat",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "fun.octadevs.omichat"
+    },
+    "android": {
+      "package": "fun.octadevs.omichat",
+      "adaptiveIcon": {
+        "backgroundColor": "#f4f6fb",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
